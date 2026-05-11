@@ -26,7 +26,7 @@ cd ~/projects
 解压项目包后进入目录：
 
 ```bash
-cd ~/projects/ai-guided-sql-assessment-bilingual-v2
+cd ~/projects/ai-guided-sql-assessment
 git init
 git add .
 git commit -m "chore: initialize bilingual project structure"
