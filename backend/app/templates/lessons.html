@@ -19,6 +19,7 @@
       <th>教学内容摘要</th>
       <th>作业提示</th>
       <th>状态</th>
+      <th>操作</th>
     </tr>
   </thead>
   <tbody>
@@ -32,6 +33,7 @@
         <td>{{ lesson.content_summary }}</td>
         <td>{{ lesson.homework_hint }}</td>
         <td>{{ lesson.status }}</td>
+        <td><a href="/lessons/{{ lesson.id }}">查看详情</a></td>
       </tr>
     {% endfor %}
   </tbody>

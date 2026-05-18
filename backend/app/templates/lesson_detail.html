@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}课次详情{% endblock %}
+{% block content %}
+<h1>课次详情</h1>
+<section class="card">
+  <h2>{{ lesson.title }}</h2>
+  <p>周次：{{ lesson.week }} ｜ 课次：{{ lesson.lesson_no }} ｜ 学时：{{ lesson.hours }}</p>
+  <p>课次编码：{{ lesson.lesson_code }} ｜ 状态：<span class="status">{{ lesson.status }}</span></p>
+  <p>教学内容摘要：{{ lesson.content_summary }}</p>
+  <p>作业提示：{{ lesson.homework_hint }}</p>
+  <p><a href="/courses/{{ lesson.course_id }}/lessons">返回课次列表</a></p>
+</section>
+
+<h2>已添加材料</h2>
+{% if materials %}
+  {% for material in materials %}
+    <section class="card">
+      <h3>{{ material.title }}</h3>
+      <p>类型：{{ material.material_type }}{% if material.file_path %} ｜ 文件：{{ material.file_path }}{% endif %}</p>
+      <pre>{{ material.content }}</pre>
+    </section>
+  {% endfor %}
+{% else %}
+  <p>当前课次还没有教学材料。</p>
+{% endif %}
+
+<h2>添加教学材料</h2>
+<section class="card">
+  {% if error_message %}
+    <p class="error">{{ error_message }}</p>
+  {% endif %}
+  <form method="post" action="/lessons/{{ lesson.id }}/materials" enctype="multipart/form-data">
+    <p>
+      <label for="title">材料标题</label><br>
+      <input id="title" name="title" type="text" required>
+    </p>
+    <p>
+      <label for="material_type">材料类型</label><br>
+      <select id="material_type" name="material_type">
+        <option value="text">粘贴文本</option>
+        <option value="lesson_plan">教案</option>
+        <option value="ppt_text">PPT 文本</option>
+        <option value="other">其他</option>
+      </select>
+    </p>
+    <p>
+      <label for="content">粘贴文本内容</label><br>
+      <textarea id="content" name="content" rows="10" style="width:100%;"></textarea>
+    </p>
+    <p>
+      <label for="file">可选上传 .txt / .md 文件</label><br>
+      <input id="file" name="file" type="file" accept=".txt,.md">
+    </p>
+    <button type="submit">保存材料</button>
+  </form>
+</section>
+{% endblock %}

@@ -10,7 +10,7 @@ from app import main
 from app.db.base import create_database_tables
 from app.models.course import Course
 from app.models.course_plan import CoursePlanUpload, PlannedLesson
-from app.models.lesson import Lesson
+from app.models.lesson import Lesson, LessonMaterial
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -273,6 +273,130 @@ async def test_lessons_page_is_accessible_and_shows_created_lessons(tmp_path: Pa
         assert "正式课次数量：2" in response.text
         with session_factory() as session:
             assert len(session.scalars(select(Lesson)).all()) == 2
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_lessons_list_links_to_lesson_detail(tmp_path: Path) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _upload_sample_plan(client, course)
+        with session_factory() as session:
+            selected_id = session.scalar(select(PlannedLesson.id).order_by(PlannedLesson.id))
+            assert selected_id is not None
+
+        await client.post(
+            "/course-plan-uploads/1/confirm",
+            data={"planned_lesson_ids": str(selected_id)},
+            follow_redirects=False,
+        )
+        response = await client.get(f"/courses/{course.id}/lessons")
+
+        assert response.status_code == 200
+        assert "查看详情" in response.text
+        assert "/lessons/1" in response.text
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_lesson_detail_page_is_accessible(tmp_path: Path) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _upload_sample_plan(client, course)
+        with session_factory() as session:
+            selected_id = session.scalar(select(PlannedLesson.id).order_by(PlannedLesson.id))
+            assert selected_id is not None
+        await client.post(
+            "/course-plan-uploads/1/confirm",
+            data={"planned_lesson_ids": str(selected_id)},
+            follow_redirects=False,
+        )
+
+        response = await client.get("/lessons/1")
+
+        assert response.status_code == 200
+        assert "课次详情" in response.text
+        assert "添加教学材料" in response.text
+        assert "已添加材料" in response.text
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_can_submit_text_lesson_material(tmp_path: Path) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _upload_sample_plan(client, course)
+        with session_factory() as session:
+            selected_id = session.scalar(select(PlannedLesson.id).order_by(PlannedLesson.id))
+            assert selected_id is not None
+        await client.post(
+            "/course-plan-uploads/1/confirm",
+            data={"planned_lesson_ids": str(selected_id)},
+            follow_redirects=False,
+        )
+
+        response = await client.post(
+            "/lessons/1/materials",
+            data={
+                "title": "本节课导入材料",
+                "material_type": "text",
+                "content": "SELECT 与 WHERE 的课堂说明。",
+            },
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 303
+        assert response.headers["location"] == "/lessons/1"
+        with session_factory() as session:
+            materials = session.scalars(select(LessonMaterial)).all()
+            assert len(materials) == 1
+            assert materials[0].lesson_id == 1
+            assert materials[0].title == "本节课导入材料"
+            assert materials[0].content == "SELECT 与 WHERE 的课堂说明。"
+            assert materials[0].file_path is None
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_lesson_detail_shows_saved_material(tmp_path: Path) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _upload_sample_plan(client, course)
+        with session_factory() as session:
+            selected_id = session.scalar(select(PlannedLesson.id).order_by(PlannedLesson.id))
+            assert selected_id is not None
+        await client.post(
+            "/course-plan-uploads/1/confirm",
+            data={"planned_lesson_ids": str(selected_id)},
+            follow_redirects=False,
+        )
+        await client.post(
+            "/lessons/1/materials",
+            data={
+                "title": "课堂讲义文本",
+                "material_type": "lesson_plan",
+                "content": "本节课讲解简单查询和条件筛选。",
+            },
+            follow_redirects=False,
+        )
+
+        response = await client.get("/lessons/1")
+
+        assert response.status_code == 200
+        assert "课堂讲义文本" in response.text
+        assert "本节课讲解简单查询和条件筛选。" in response.text
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()

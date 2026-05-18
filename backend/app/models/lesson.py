@@ -32,6 +32,23 @@ class Lesson(Base):
 
     course = relationship("Course", back_populates="lessons")
     planned_lesson = relationship("PlannedLesson", back_populates="lesson")
+    materials = relationship("LessonMaterial", back_populates="lesson", cascade="all, delete-orphan")
+
+
+class LessonMaterial(Base):
+    """课次教学材料。"""
+
+    __tablename__ = "lesson_materials"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    lesson_id: Mapped[int] = mapped_column(ForeignKey("lessons.id"), nullable=False, index=True)
+    material_type: Mapped[str] = mapped_column(String(50), nullable=False, default="text")
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    file_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
+
+    lesson = relationship("Lesson", back_populates="materials")
 
 
 def create_lesson_from_planned_lesson(planned_lesson: PlannedLesson) -> Lesson | None:
