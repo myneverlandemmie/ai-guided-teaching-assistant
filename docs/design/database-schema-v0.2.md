@@ -530,3 +530,158 @@ V0.2 为了保证半个月内可落地，采用以下简化策略：
 - planned_lessons 数据结构；
 - 解析单元测试；
 - 最小课程计划上传与预览页面。
+## 11. Programming Assignment Extension / 编程作业扩展预留
+
+V0.2 当前 SQL 主线可以先沿用现有 `assignments`、`submissions`、`grading_results` 三张表完成 SQL 作业、提交和教师复核。不要为了 Python 加分原型强行推翻已有设计。
+
+如果后续需要同时支持 SQL 和 Python 等编程类作业，可以逐步抽象为统一的 `programming_*` 表。该设计用于扩展预留，不要求在 V0.2 主线中一次性全部实现。
+
+### 11.1 programming_assignments / 编程作业表
+
+用于统一保存 SQL / Python 等编程类作业。
+
+| 字段名 | 类型建议 | 含义 |
+|---|---|---|
+| id | integer / bigint | 编程作业 ID |
+| lesson_id | integer / bigint | 所属课次 ID |
+| assignment_type | varchar | sql / python |
+| title | varchar | 作业标题 |
+| description | text | 作业说明 |
+| starter_code | text | 起始代码，可选 |
+| test_cases | text / json | 测试用例 |
+| expected_outputs | text / json | 期望输出 |
+| max_score | integer | 满分 |
+| status | varchar | draft / published / archived |
+| created_at | datetime | 创建时间 |
+| updated_at | datetime | 更新时间 |
+
+说明：
+
+- SQL 主线仍可使用当前 `assignments` 表。
+- Python 基础题原型如需落库，可以先复用 `assignments.assignment_type`，后续再迁移到 `programming_assignments`。
+- Python 原型只面向单文件 `.py` 和简单输入输出题，不记录多文件项目结构。
+
+### 11.2 programming_submissions / 编程提交表
+
+用于统一保存 SQL / Python 等编程类提交。
+
+| 字段名 | 类型建议 | 含义 |
+|---|---|---|
+| id | integer / bigint | 提交 ID |
+| assignment_id | integer / bigint | 编程作业 ID |
+| student_id | integer / bigint | 学生 ID |
+| submitted_code | text | 学生提交代码 |
+| submitted_at | datetime | 提交时间 |
+| status | varchar | submitted / graded / reviewed / published |
+| attempt_no | integer | 第几次提交 |
+
+说明：
+
+- 当前 `submissions.content` 可先保存 SQL 或 Python 提交内容。
+- 后续统一为 `submitted_code` 时，应保留旧数据迁移路径。
+- Python 提交不得包含真实学生身份信息，也不得提交到公开仓库。
+
+### 11.3 grading_annotations / 批阅与标注表
+
+用于保存自动批阅结果、教师复核结果和学习错误数据标注。
+
+| 字段名 | 类型建议 | 含义 |
+|---|---|---|
+| id | integer / bigint | 标注 ID |
+| submission_id | integer / bigint | 提交 ID |
+| auto_score | integer | 系统初评分 |
+| final_score | integer | 教师最终评分 |
+| stdout | text | 标准输出 |
+| stderr | text | 标准错误 |
+| error_type_auto | varchar | 系统自动识别错误类型 |
+| error_type_teacher | varchar | 教师修正错误类型 |
+| auto_feedback | text | 系统反馈 |
+| teacher_feedback | text | 教师反馈 |
+| need_followup | boolean | 是否需要后续辅导 |
+| can_enter_dataset | boolean | 是否可作为脱敏样本进入教学错误数据集 |
+| reviewed_by | integer / bigint | 复核教师 ID |
+| reviewed_at | datetime | 复核时间 |
+| status | varchar | auto_graded / reviewed / published |
+
+说明：
+
+- 当前 `grading_results` 已能保存自动分、最终分、执行输出、错误信息和教师反馈。
+- V0.2 可先在 `grading_results` 上扩展错误类型字段，或在后续版本新增 `grading_annotations`。
+- `can_enter_dataset` 只能在脱敏、授权和教学用途明确的前提下使用。
+- 数据标注不是为了监控学生，而是为了帮助教师理解常见错误、优化导学案和改进教学。
+
+## 12. Error Type Tags / 错误类型标签
+
+### 12.1 Python Error Tags / Python 错误标签
+
+Python 基础题批阅原型只识别入门级错误标签。
+
+| 标签 | 含义 |
+|---|---|
+| SyntaxError | 语法错误 |
+| NameError | 变量未定义 |
+| TypeError | 类型错误 |
+| ValueError | 值错误 |
+| IndexError | 索引错误 |
+| ZeroDivisionError | 除零错误 |
+| Timeout | 运行超时 |
+| WrongAnswer | 答案错误 |
+| FormatError | 输出格式错误 |
+| LogicError | 疑似逻辑错误 |
+| FunctionCallError | 函数调用错误 |
+| ParameterError | 形参与实参理解错误 |
+| InputOutputError | 输入输出理解错误 |
+
+### 12.2 SQL Error Tags / SQL 错误标签
+
+SQL 主线可先覆盖基础查询错误标签，后续随教学内容扩展。
+
+| 标签 | 含义 |
+|---|---|
+| SqlSyntaxError | SQL 语法错误 |
+| TableNameError | 表名错误 |
+| ColumnNameError | 字段名错误 |
+| ConditionError | 条件筛选错误 |
+| OrderByError | 排序错误 |
+| AggregationError | 聚合错误 |
+| GroupByError | 分组错误 |
+| JoinError | 连接错误 |
+| WrongAnswer | 结果错误 |
+| FormatError | 结果格式错误 |
+
+## 13. Learning Data Annotation Notes / 学习数据标注说明
+
+系统在自动批阅与教师复核过程中，可以同步沉淀学习过程数据，包括：
+
+- 学生提交内容；
+- 作业类型；
+- 测试用例结果；
+- `stdout`；
+- `stderr`；
+- 自动识别错误类型；
+- 系统初评；
+- 教师最终评分；
+- 教师修正反馈；
+- 教师标注的错误类型；
+- 是否需要后续辅导；
+- 是否可作为脱敏样本进入教学错误数据集。
+
+约束：
+
+- 数据标注不是为了监控学生，而是为了帮助教师理解常见错误、优化导学案和改进教学；
+- 公开仓库不得包含真实学生数据；
+- 案例材料中只能使用演示数据或脱敏数据；
+- 数据集建设是后续拓展方向，V0.2 只做开端；
+- 项目方演示服务器不得沉淀外部真实班级数据。
+
+## 14. Confirmed Annotation Defaults / 已确认标注默认值
+
+V0.2 学习错误标注的默认规则：
+
+1. 教师标注采用主错误类型单选，字段可使用 `error_type_teacher`。
+2. 教师补充说明使用文本字段，可复用 `teacher_feedback` 或后续扩展单独说明字段。
+3. V0.2 不实现多标签错误类型。
+4. `can_enter_dataset` 必须默认 `false`。
+5. 只有教师手动勾选后，样本才允许作为脱敏样本进入教学错误数据集。
+
+该默认值是数据安全边界的一部分，不能在演示服务器或公开样例中默认打开。
