@@ -5,53 +5,87 @@
 <section class="card">
   <h2>{{ lesson.title }}</h2>
   <p>周次：{{ lesson.week }} ｜ 课次：{{ lesson.lesson_no }} ｜ 学时：{{ lesson.hours }}</p>
-  <p>课次编码：{{ lesson.lesson_code }} ｜ 状态：<span class="status">{{ lesson.status }}</span></p>
+  <p>课次编码：{{ lesson.lesson_code }} ｜ 状态：<span class="status">{{ lesson_status_labels.get(lesson.status, lesson.status) }}</span></p>
   <p>教学内容摘要：{{ lesson.content_summary }}</p>
   <p>作业提示：{{ lesson.homework_hint }}</p>
   <p><a href="/courses/{{ lesson.course_id }}/lessons">返回课次列表</a></p>
 </section>
 
-<h2>已添加材料</h2>
+<h2>已添加资料</h2>
 {% if materials %}
   {% for material in materials %}
-    <section class="card">
-      <h3>{{ material.title }}</h3>
-      <p>类型：{{ material.material_type }}{% if material.file_path %} ｜ 文件：{{ material.file_path }}{% endif %}</p>
-      <pre>{{ material.content }}</pre>
-    </section>
+    <details class="card" {% if loop.first %}open{% endif %}>
+      <summary>
+        {{ material.title }} ｜ {{ material_type_labels.get(material.material_type, material.material_type) }} ｜ {{ material.created_at.strftime('%Y-%m-%d %H:%M') if material.created_at else '' }}
+      </summary>
+      {% if material.file_path %}
+        <p>原始文件名：{{ material.file_path|basename }}</p>
+      {% else %}
+        <p>资料来源：粘贴文本</p>
+      {% endif %}
+      <form method="post" action="/lesson-materials/{{ material.id }}/delete" onsubmit="return confirm('确认删除这份资料吗？');">
+        <button type="submit">删除资料</button>
+      </form>
+      <pre style="white-space: pre-wrap; line-height: 1.7; max-height: 32rem; overflow: auto; padding: 1rem; background: #f8fafc; border: 1px solid #dbe3ea; border-radius: 8px;">{{ material.content }}</pre>
+    </details>
   {% endfor %}
 {% else %}
-  <p>当前课次还没有教学材料。</p>
+  <p>当前课次还没有教学资料。</p>
 {% endif %}
 
-<h2>添加教学材料</h2>
+<h2>添加教学资料</h2>
 <section class="card">
+  <div class="card">
+    <strong>材料支持范围</strong>
+    <p>当前支持直接粘贴文本，也支持上传 .txt、.md、.docx 文件。</p>
+    <p>实验性支持 .pptx 文本提取；Word / PPT 仅提取可读取文本。</p>
+    <p>图片、公式、复杂图表、扫描件无法自动识别；如果提取结果不完整，请复制文字粘贴到文本框中补充。暂不支持旧版 .doc、.ppt、PDF、图片文件。</p>
+  </div>
   {% if error_message %}
     <p class="error">{{ error_message }}</p>
   {% endif %}
   <form method="post" action="/lessons/{{ lesson.id }}/materials" enctype="multipart/form-data">
     <p>
-      <label for="title">材料标题</label><br>
-      <input id="title" name="title" type="text" required>
+      <label for="title">资料标题</label><br>
+      <input id="title" name="title" type="text" placeholder="可不填，系统会自动生成">
     </p>
     <p>
-      <label for="material_type">材料类型</label><br>
+      <label for="material_type">资料类型</label><br>
       <select id="material_type" name="material_type">
-        <option value="text">粘贴文本</option>
-        <option value="lesson_plan">教案</option>
-        <option value="ppt_text">PPT 文本</option>
-        <option value="other">其他</option>
+        <option value="pasted_text">粘贴文本</option>
+        <option value="lesson_plan">教案（DOCX）</option>
+        <option value="course_ppt">课程 PPT（PPTX）</option>
+        <option value="training_guide">实训指导书（MD / DOCX）</option>
+        <option value="supplementary">补充资料（TXT / MD / DOCX / PPTX）</option>
       </select>
     </p>
-    <p>
+    <p id="pasted-text-area">
       <label for="content">粘贴文本内容</label><br>
       <textarea id="content" name="content" rows="10" style="width:100%;"></textarea>
     </p>
-    <p>
-      <label for="file">可选上传 .txt / .md 文件</label><br>
-      <input id="file" name="file" type="file" accept=".txt,.md">
+    <p id="file-upload-area" style="display:none;">
+      <label for="files">选择文件，可一次选择多个</label><br>
+      <input id="files" name="files" type="file" accept=".txt,.md,.docx,.pptx" multiple>
     </p>
-    <button type="submit">保存材料</button>
+    <button type="submit">添加到本课次</button>
   </form>
 </section>
+<script>
+  const materialType = document.getElementById('material_type');
+  const pastedTextArea = document.getElementById('pasted-text-area');
+  const fileUploadArea = document.getElementById('file-upload-area');
+  const contentInput = document.getElementById('content');
+  const filesInput = document.getElementById('files');
+
+  function syncMaterialInputMode() {
+    const isPastedText = materialType.value === 'pasted_text';
+    pastedTextArea.style.display = isPastedText ? 'block' : 'none';
+    fileUploadArea.style.display = isPastedText ? 'none' : 'block';
+    contentInput.required = isPastedText;
+    filesInput.required = !isPastedText;
+  }
+
+  materialType.addEventListener('change', syncMaterialInputMode);
+  syncMaterialInputMode();
+</script>
 {% endblock %}

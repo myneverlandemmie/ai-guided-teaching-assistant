@@ -20,11 +20,34 @@ from app.models.course import Course
 from app.models.course_plan import CoursePlanUpload, PlannedLesson
 from app.models.lesson import Lesson, LessonMaterial
 from app.services.course_plan.import_service import create_lessons_from_confirmed_planned_lessons, import_course_plan
+from app.services.lesson_materials.document_text_extractor import (
+    LessonMaterialExtractionError,
+    SUPPORTED_MATERIAL_SUFFIXES,
+    extract_text_from_lesson_material,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 COURSE_PLAN_UPLOAD_DIR = PROJECT_ROOT / "data" / "uploads" / "course-plans"
 LESSON_MATERIAL_UPLOAD_DIR = PROJECT_ROOT / "data" / "uploads" / "lesson-materials"
+MATERIAL_TYPE_LABELS = {
+    "pasted_text": "粘贴文本",
+    "lesson_plan": "教案（DOCX）",
+    "course_ppt": "课程 PPT（PPTX）",
+    "training_guide": "实训指导书（MD / DOCX）",
+    "supplementary": "补充资料（TXT / MD / DOCX / PPTX）",
+    "text": "粘贴文本",
+    "ppt_text": "课程 PPT（PPTX）",
+    "other": "补充资料",
+}
+LESSON_STATUS_LABELS = {"draft": "草稿", "published": "已发布", "archived": "已归档"}
+DEFAULT_MATERIAL_TITLE_LABELS = {
+    "pasted_text": "粘贴文本",
+    "lesson_plan": "教案",
+    "course_ppt": "课程PPT",
+    "training_guide": "实训指导书",
+    "supplementary": "补充资料",
+}
 
 
 @asynccontextmanager
@@ -38,6 +61,53 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="AI Guided SQL Assessment", lifespan=lifespan)
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
+templates.env.filters["basename"] = lambda value: Path(value).name if value else ""
+
+
+def _lesson_material_title_prefix(lesson: Lesson) -> str:
+    """生成资料标题前缀，优先使用课次编码。"""
+
+    return lesson.lesson_code or f"课次{lesson.id}"
+
+
+def _generate_lesson_material_title(
+    db: Session,
+    lesson: Lesson,
+    material_type: str,
+    requested_title: str | None = None,
+) -> str:
+    """生成不重复的课次资料标题。
+
+    Args:
+        db: SQLAlchemy Session。
+        lesson: 资料所属课次。
+        material_type: 资料类型。
+        requested_title: 教师手动填写的标题，可为空。
+
+    Returns:
+        当前课次内不重复的资料标题。
+
+    Raises:
+        SQLAlchemy 查询异常会继续向外抛出。
+    """
+
+    requested_title = (requested_title or "").strip()
+    if requested_title:
+        base_title = requested_title
+    else:
+        label = DEFAULT_MATERIAL_TITLE_LABELS.get(material_type, "资料")
+        base_title = f"{_lesson_material_title_prefix(lesson)}-{label}"
+
+    existing_titles = set(
+        db.scalars(select(LessonMaterial.title).where(LessonMaterial.lesson_id == lesson.id)).all()
+    )
+    if base_title not in existing_titles:
+        return base_title
+
+    index = 2
+    while f"{base_title}（{index}）" in existing_titles:
+        index += 1
+    return f"{base_title}（{index}）"
 
 
 def get_or_create_demo_course(session: Session) -> Course:
@@ -257,88 +327,141 @@ async def show_lesson_detail(
     materials = db.scalars(
         select(LessonMaterial)
         .where(LessonMaterial.lesson_id == lesson.id)
-        .order_by(LessonMaterial.id)
+        .order_by(LessonMaterial.id.desc())
     ).all()
 
     return templates.TemplateResponse(
         request,
         "lesson_detail.html",
-        {"lesson": lesson, "materials": materials, "error_message": None},
+        {"lesson": lesson, "materials": materials, "error_message": None, "material_type_labels": MATERIAL_TYPE_LABELS, "lesson_status_labels": LESSON_STATUS_LABELS},
     )
+
+
+def _lesson_material_context(db: Session, lesson: Lesson, error_message: str | None = None) -> dict[str, object]:
+    """构造课次材料页面上下文。"""
+
+    materials = db.scalars(
+        select(LessonMaterial)
+        .where(LessonMaterial.lesson_id == lesson.id)
+        .order_by(LessonMaterial.id.desc())
+    ).all()
+    return {
+        "lesson": lesson,
+        "materials": materials,
+        "error_message": error_message,
+        "material_type_labels": MATERIAL_TYPE_LABELS,
+        "lesson_status_labels": LESSON_STATUS_LABELS,
+    }
 
 
 @app.post("/lessons/{lesson_id}/materials", response_class=HTMLResponse)
 async def add_lesson_material(
     lesson_id: int,
     request: Request,
-    title: str = Form(...),
-    material_type: str = Form("text"),
+    title: str = Form(""),
+    material_type: str = Form("pasted_text"),
     content: str = Form(""),
-    file: UploadFile | None = File(None),
+    files: list[UploadFile] | None = File(None),
     db: Session = Depends(get_db),
 ) -> Response:
-    """为课次添加教学材料，支持粘贴文本和可选 .txt / .md 文件。"""
+    """为课次添加教学材料，支持粘贴文本和多文件上传。"""
 
     lesson = db.get(Lesson, lesson_id)
     if lesson is None:
         raise HTTPException(status_code=404, detail="课次不存在")
 
-    saved_path: Path | None = None
-    file_content = ""
-    if file is not None and file.filename:
-        suffix = Path(file.filename).suffix.lower()
-        if suffix not in {".txt", ".md"}:
-            materials = db.scalars(
-                select(LessonMaterial)
-                .where(LessonMaterial.lesson_id == lesson.id)
-                .order_by(LessonMaterial.id)
-            ).all()
+    title_text = title.strip()
+    uploaded_files = [uploaded_file for uploaded_file in (files or []) if uploaded_file.filename]
+    if material_type == "pasted_text":
+        material_content = content.strip()
+        if not material_content:
             return templates.TemplateResponse(
                 request,
                 "lesson_detail.html",
-                {
-                    "lesson": lesson,
-                    "materials": materials,
-                    "error_message": "当前仅支持 .txt 或 .md 教学材料文件。",
-                },
+                _lesson_material_context(db, lesson, "请选择“粘贴文本”并填写文本内容。"),
                 status_code=400,
             )
+        material = LessonMaterial(
+            lesson_id=lesson.id,
+            material_type=material_type,
+            title=_generate_lesson_material_title(db, lesson, material_type, title_text),
+            content=material_content,
+            file_path=None,
+        )
+        db.add(material)
+        db.commit()
+        return RedirectResponse(url=f"/lessons/{lesson.id}", status_code=303)
 
-        LESSON_MATERIAL_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        safe_filename = Path(file.filename).name
-        saved_path = LESSON_MATERIAL_UPLOAD_DIR / f"{uuid4().hex}-{safe_filename}"
-        # 文件材料保存到运行时目录；目录由 .gitignore 排除，不进入公开仓库。
-        file_bytes = await file.read()
-        saved_path.write_bytes(file_bytes)
-        file_content = file_bytes.decode("utf-8", errors="replace")
-
-    material_content = content.strip() or file_content
-    if not material_content:
-        materials = db.scalars(
-            select(LessonMaterial)
-            .where(LessonMaterial.lesson_id == lesson.id)
-            .order_by(LessonMaterial.id)
-        ).all()
+    if not uploaded_files:
         return templates.TemplateResponse(
             request,
             "lesson_detail.html",
-            {
-                "lesson": lesson,
-                "materials": materials,
-                "error_message": "请粘贴文本内容，或上传 .txt / .md 文件。",
-            },
+            _lesson_material_context(db, lesson, "请选择一个或多个 .txt / .md / .docx / .pptx 文件。"),
             status_code=400,
         )
 
-    # V0.2 只保存朴素文本材料，不做 AI 解析或复杂富文本编辑。
-    material = LessonMaterial(
-        lesson_id=lesson.id,
-        material_type=material_type,
-        title=title.strip(),
-        content=material_content,
-        file_path=str(saved_path) if saved_path is not None else None,
-    )
-    db.add(material)
+    LESSON_MATERIAL_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    errors: list[str] = []
+    created_count = 0
+    multiple_files = len(uploaded_files) > 1
+    for uploaded_file in uploaded_files:
+        safe_filename = Path(uploaded_file.filename or "lesson-material").name
+        suffix = Path(safe_filename).suffix.lower()
+        if suffix not in SUPPORTED_MATERIAL_SUFFIXES:
+            errors.append(f"{safe_filename}：暂不支持该文件类型。请上传 .txt / .md / .docx / .pptx；不支持 PDF、图片、扫描件和旧版 .doc / .ppt。")
+            continue
+
+        saved_path = LESSON_MATERIAL_UPLOAD_DIR / f"{uuid4().hex}-{safe_filename}"
+        # 文件材料保存到运行时目录；目录由 .gitignore 排除，不进入公开仓库。
+        file_bytes = await uploaded_file.read()
+        saved_path.write_bytes(file_bytes)
+        try:
+            file_content = extract_text_from_lesson_material(saved_path, safe_filename)
+        except LessonMaterialExtractionError as exc:
+            errors.append(f"{safe_filename}：{exc} 如果提取结果不完整，请复制文字粘贴到文本框中补充。")
+            saved_path.unlink(missing_ok=True)
+            continue
+
+        requested_title = f"{title_text} - {safe_filename}" if title_text and multiple_files else title_text
+        material = LessonMaterial(
+            lesson_id=lesson.id,
+            material_type=material_type,
+            title=_generate_lesson_material_title(db, lesson, material_type, requested_title),
+            content=file_content,
+            file_path=str(saved_path),
+        )
+        db.add(material)
+        created_count += 1
+
     db.commit()
+    if errors:
+        message = "；".join(errors)
+        if created_count:
+            message = f"已成功添加 {created_count} 份资料。以下文件未能保存：{message}"
+        return templates.TemplateResponse(
+            request,
+            "lesson_detail.html",
+            _lesson_material_context(db, lesson, message),
+            status_code=400,
+        )
 
     return RedirectResponse(url=f"/lessons/{lesson.id}", status_code=303)
+
+
+@app.post("/lesson-materials/{material_id}/delete")
+async def delete_lesson_material(
+    material_id: int,
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    """删除课次教学资料，并尽量删除对应上传文件。"""
+
+    material = db.get(LessonMaterial, material_id)
+    if material is None:
+        raise HTTPException(status_code=404, detail="资料不存在")
+
+    lesson_id = material.lesson_id
+    if material.file_path:
+        Path(material.file_path).unlink(missing_ok=True)
+    db.delete(material)
+    db.commit()
+    return RedirectResponse(url=f"/lessons/{lesson_id}", status_code=303)

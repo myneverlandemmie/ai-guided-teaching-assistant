@@ -12,3 +12,5 @@ python-dotenv
 passlib[bcrypt]
 pytest
 httpx
+python-docx
+python-pptx
