@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}知识主干{% endblock %}
+{% block content %}
+<h1>知识主干</h1>
+<section class="card">
+  <h2>{{ lesson.title }}</h2>
+  <p>课次编码：{{ lesson.lesson_code or "未设置" }}</p>
+  <p>提示：当前知识主干默认基于本课次下已添加资料生成。如果 PPT 覆盖多个课次或整章内容，建议只上传与本课次相关的页文本，或在生成后人工删改。AI 生成内容仅作为初稿，必须由教师复核后使用。</p>
+  <p><a href="/lessons/{{ lesson.id }}">返回课次详情</a></p>
+</section>
+
+{% if outline %}
+  <section class="card">
+    <p>当前状态：{{ knowledge_outline_status_labels.get(outline.status, outline.status) }}</p>
+    <p>生成模型：{{ outline.generated_by_model }}</p>
+    <p>说明：本页内容由 Mock AI 生成初稿，必须由教师编辑、复核后使用。</p>
+    <form method="post" action="/knowledge-outlines/{{ outline.id }}/save">
+      <label for="edited_content">知识主干内容</label><br>
+      <textarea id="edited_content" name="edited_content" rows="28" style="width:100%; line-height:1.7;">{{ outline.edited_content }}</textarea>
+      <p><button type="submit">保存教师修改</button></p>
+    </form>
+  </section>
+{% else %}
+  <section class="card">
+    <p>当前课次还没有知识主干。请先生成 Mock 初稿。</p>
+    <form method="post" action="/lessons/{{ lesson.id }}/knowledge-outline/generate">
+      <button type="submit">生成知识主干</button>
+    </form>
+  </section>
+{% endif %}
+{% endblock %}

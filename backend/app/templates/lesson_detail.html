@@ -11,6 +11,22 @@
   <p><a href="/courses/{{ lesson.course_id }}/lessons">返回课次列表</a></p>
 </section>
 
+<h2>知识主干</h2>
+<section class="card">
+  {% if knowledge_outline %}
+    <p>已生成知识主干，当前状态：{{ knowledge_outline_status_labels.get(knowledge_outline.status, knowledge_outline.status) }}</p>
+    <p>{{ knowledge_outline.edited_content[:120] }}{% if knowledge_outline.edited_content|length > 120 %}...{% endif %}</p>
+    <p><a href="/lessons/{{ lesson.id }}/knowledge-outline">查看并编辑知识主干</a></p>
+  {% else %}
+    <p>当前课次还没有知识主干。可基于课次信息和已添加资料生成一版 Mock 初稿，再由教师编辑确认。</p>
+    <p><a href="/lessons/{{ lesson.id }}/knowledge-outline">查看知识主干</a></p>
+  {% endif %}
+  <p>提示：当前知识主干默认基于本课次下已添加资料生成。如果 PPT 覆盖多个课次或整章内容，建议只上传与本课次相关的页文本，或在生成后人工删改。AI 生成内容仅作为初稿，必须由教师复核后使用。</p>
+  <form method="post" action="/lessons/{{ lesson.id }}/knowledge-outline/generate">
+    <button type="submit">生成知识主干</button>
+  </form>
+</section>
+
 <h2>已添加资料</h2>
 {% if materials %}
   {% for material in materials %}

@@ -18,8 +18,10 @@ from app.db.base import create_database_tables
 from app.db.session import engine, get_db
 from app.models.course import Course
 from app.models.course_plan import CoursePlanUpload, PlannedLesson
+from app.models.knowledge_outline import KnowledgeOutline
 from app.models.lesson import Lesson, LessonMaterial
 from app.services.course_plan.import_service import create_lessons_from_confirmed_planned_lessons, import_course_plan
+from app.services.ai.mock_outline_service import MOCK_OUTLINE_MODEL_NAME, generate_mock_knowledge_outline
 from app.services.lesson_materials.document_text_extractor import (
     LessonMaterialExtractionError,
     SUPPORTED_MATERIAL_SUFFIXES,
@@ -41,6 +43,7 @@ MATERIAL_TYPE_LABELS = {
     "other": "补充资料",
 }
 LESSON_STATUS_LABELS = {"draft": "草稿", "published": "已发布", "archived": "已归档"}
+KNOWLEDGE_OUTLINE_STATUS_LABELS = {"draft": "草稿", "reviewed": "已复核", "published": "已发布"}
 DEFAULT_MATERIAL_TITLE_LABELS = {
     "pasted_text": "粘贴文本",
     "lesson_plan": "教案",
@@ -108,6 +111,16 @@ def _generate_lesson_material_title(
     while f"{base_title}（{index}）" in existing_titles:
         index += 1
     return f"{base_title}（{index}）"
+
+
+def _get_latest_knowledge_outline(db: Session, lesson_id: int) -> KnowledgeOutline | None:
+    """读取课次最新一条知识主干。"""
+
+    return db.scalar(
+        select(KnowledgeOutline)
+        .where(KnowledgeOutline.lesson_id == lesson_id)
+        .order_by(KnowledgeOutline.id.desc())
+    )
 
 
 def get_or_create_demo_course(session: Session) -> Course:
@@ -329,11 +342,20 @@ async def show_lesson_detail(
         .where(LessonMaterial.lesson_id == lesson.id)
         .order_by(LessonMaterial.id.desc())
     ).all()
+    knowledge_outline = _get_latest_knowledge_outline(db, lesson.id)
 
     return templates.TemplateResponse(
         request,
         "lesson_detail.html",
-        {"lesson": lesson, "materials": materials, "error_message": None, "material_type_labels": MATERIAL_TYPE_LABELS, "lesson_status_labels": LESSON_STATUS_LABELS},
+        {
+            "lesson": lesson,
+            "materials": materials,
+            "error_message": None,
+            "material_type_labels": MATERIAL_TYPE_LABELS,
+            "lesson_status_labels": LESSON_STATUS_LABELS,
+            "knowledge_outline": knowledge_outline,
+            "knowledge_outline_status_labels": KNOWLEDGE_OUTLINE_STATUS_LABELS,
+        },
     )
 
 
@@ -345,12 +367,15 @@ def _lesson_material_context(db: Session, lesson: Lesson, error_message: str | N
         .where(LessonMaterial.lesson_id == lesson.id)
         .order_by(LessonMaterial.id.desc())
     ).all()
+    knowledge_outline = _get_latest_knowledge_outline(db, lesson.id)
     return {
         "lesson": lesson,
         "materials": materials,
         "error_message": error_message,
         "material_type_labels": MATERIAL_TYPE_LABELS,
         "lesson_status_labels": LESSON_STATUS_LABELS,
+        "knowledge_outline": knowledge_outline,
+        "knowledge_outline_status_labels": KNOWLEDGE_OUTLINE_STATUS_LABELS,
     }
 
 
@@ -465,3 +490,76 @@ async def delete_lesson_material(
     db.delete(material)
     db.commit()
     return RedirectResponse(url=f"/lessons/{lesson_id}", status_code=303)
+
+
+@app.post("/lessons/{lesson_id}/knowledge-outline/generate")
+async def generate_lesson_knowledge_outline(
+    lesson_id: int,
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    """使用 Mock AI 为课次生成知识主干初稿。"""
+
+    lesson = db.get(Lesson, lesson_id)
+    if lesson is None:
+        raise HTTPException(status_code=404, detail="课次不存在")
+
+    materials = db.scalars(
+        select(LessonMaterial)
+        .where(LessonMaterial.lesson_id == lesson.id)
+        .order_by(LessonMaterial.id)
+    ).all()
+    outline_text = generate_mock_knowledge_outline(lesson, materials)
+    # Mock 初稿和教师编辑稿初始一致，后续必须由教师编辑保存。
+    outline = KnowledgeOutline(
+        lesson_id=lesson.id,
+        ai_raw_output=outline_text,
+        edited_content=outline_text,
+        status="draft",
+        generated_by_model=MOCK_OUTLINE_MODEL_NAME,
+    )
+    db.add(outline)
+    db.commit()
+    return RedirectResponse(url=f"/lessons/{lesson.id}/knowledge-outline", status_code=303)
+
+
+@app.get("/lessons/{lesson_id}/knowledge-outline", response_class=HTMLResponse)
+async def show_lesson_knowledge_outline(
+    lesson_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """显示课次知识主干编辑页面。"""
+
+    lesson = db.get(Lesson, lesson_id)
+    if lesson is None:
+        raise HTTPException(status_code=404, detail="课次不存在")
+
+    outline = _get_latest_knowledge_outline(db, lesson.id)
+    return templates.TemplateResponse(
+        request,
+        "knowledge_outline.html",
+        {
+            "lesson": lesson,
+            "outline": outline,
+            "knowledge_outline_status_labels": KNOWLEDGE_OUTLINE_STATUS_LABELS,
+        },
+    )
+
+
+@app.post("/knowledge-outlines/{outline_id}/save")
+async def save_knowledge_outline(
+    outline_id: int,
+    edited_content: str = Form(...),
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    """保存教师编辑后的知识主干。"""
+
+    outline = db.get(KnowledgeOutline, outline_id)
+    if outline is None:
+        raise HTTPException(status_code=404, detail="知识主干不存在")
+
+    # 保存教师复核后的版本；后续页面使用 edited_content 展示。
+    outline.edited_content = edited_content.strip()
+    outline.status = "reviewed"
+    db.commit()
+    return RedirectResponse(url=f"/lessons/{outline.lesson_id}/knowledge-outline", status_code=303)

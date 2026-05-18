@@ -12,6 +12,7 @@ from app import main
 from app.db.base import create_database_tables
 from app.models.course import Course
 from app.models.course_plan import CoursePlanUpload, PlannedLesson
+from app.models.knowledge_outline import KnowledgeOutline
 from app.models.lesson import Lesson, LessonMaterial
 
 
@@ -814,6 +815,209 @@ async def test_can_delete_lesson_material(tmp_path: Path) -> None:
         assert response.headers["location"] == "/lessons/1"
         with session_factory() as session:
             assert session.scalars(select(LessonMaterial)).all() == []
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_lesson_detail_shows_knowledge_outline_entry(tmp_path: Path) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _upload_sample_plan(client, course)
+        with session_factory() as session:
+            selected_id = session.scalar(select(PlannedLesson.id).order_by(PlannedLesson.id))
+            assert selected_id is not None
+        await client.post(
+            "/course-plan-uploads/1/confirm",
+            data={"planned_lesson_ids": str(selected_id)},
+            follow_redirects=False,
+        )
+
+        response = await client.get("/lessons/1")
+
+        assert response.status_code == 200
+        assert "知识主干" in response.text
+        assert "生成知识主干" in response.text
+        assert "/lessons/1/knowledge-outline" in response.text
+        assert "默认基于本课次下已添加资料生成" in response.text
+        assert "如果 PPT 覆盖多个课次或整章内容" in response.text
+        assert "必须由教师复核后使用" in response.text
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_can_generate_mock_knowledge_outline_without_materials(tmp_path: Path) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _upload_sample_plan(client, course)
+        with session_factory() as session:
+            selected_id = session.scalar(select(PlannedLesson.id).order_by(PlannedLesson.id))
+            assert selected_id is not None
+        await client.post(
+            "/course-plan-uploads/1/confirm",
+            data={"planned_lesson_ids": str(selected_id)},
+            follow_redirects=False,
+        )
+
+        response = await client.post("/lessons/1/knowledge-outline/generate", follow_redirects=False)
+
+        assert response.status_code == 303
+        assert response.headers["location"] == "/lessons/1/knowledge-outline"
+        with session_factory() as session:
+            outline = session.scalar(select(KnowledgeOutline))
+            lesson = session.get(Lesson, 1)
+            assert outline is not None
+            assert lesson is not None
+            assert outline.lesson_id == 1
+            assert outline.generated_by_model == "mock-ai-v0.2"
+            assert outline.status == "draft"
+            assert outline.ai_raw_output == outline.edited_content
+            assert lesson.title in outline.edited_content
+            assert "当前课次尚未添加教学材料" in outline.edited_content
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_mock_knowledge_outline_uses_lesson_material_keywords(tmp_path: Path) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _upload_sample_plan(client, course)
+        with session_factory() as session:
+            selected_id = session.scalar(select(PlannedLesson.id).order_by(PlannedLesson.id))
+            assert selected_id is not None
+        await client.post(
+            "/course-plan-uploads/1/confirm",
+            data={"planned_lesson_ids": str(selected_id)},
+            follow_redirects=False,
+        )
+        await client.post(
+            "/lessons/1/materials",
+            data={
+                "title": "课堂材料",
+                "material_type": "pasted_text",
+                "content": "本节课练习 SELECT、WHERE、GROUP BY 和 HAVING。",
+            },
+            follow_redirects=False,
+        )
+
+        response = await client.post("/lessons/1/knowledge-outline/generate", follow_redirects=False)
+
+        assert response.status_code == 303
+        with session_factory() as session:
+            outline = session.scalar(select(KnowledgeOutline))
+            assert outline is not None
+            assert "SELECT" in outline.edited_content
+            assert "WHERE" in outline.edited_content
+            assert "GROUP BY" in outline.edited_content
+            assert "HAVING" in outline.edited_content
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_mock_knowledge_outline_filters_sensitive_material_information(tmp_path: Path) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    sensitive_material = "\n".join(
+        [
+            "学校：示例学校",
+            "任课教师：张老师",
+            "授课班级：23物联网2班",
+            "授课地点：示例机房",
+            "教学目标：掌握 WHERE 条件查询。",
+            "重点：WHERE、IN关键字 的使用。",
+            "难点：多个条件组合。",
+        ]
+    )
+    try:
+        await _upload_sample_plan(client, course)
+        with session_factory() as session:
+            selected_id = session.scalar(select(PlannedLesson.id).order_by(PlannedLesson.id))
+            assert selected_id is not None
+        await client.post(
+            "/course-plan-uploads/1/confirm",
+            data={"planned_lesson_ids": str(selected_id)},
+            follow_redirects=False,
+        )
+        await client.post(
+            "/lessons/1/materials",
+            data={
+                "title": "含行政信息的虚构材料",
+                "material_type": "pasted_text",
+                "content": sensitive_material,
+            },
+            follow_redirects=False,
+        )
+
+        response = await client.post("/lessons/1/knowledge-outline/generate", follow_redirects=False)
+
+        assert response.status_code == 303
+        with session_factory() as session:
+            material = session.scalar(select(LessonMaterial))
+            outline = session.scalar(select(KnowledgeOutline))
+            assert material is not None
+            assert outline is not None
+            assert "示例学校" in material.content
+            assert "张老师" in material.content
+            assert "23物联网2班" in material.content
+            assert "示例学校" not in outline.edited_content
+            assert "张老师" not in outline.edited_content
+            assert "23物联网2班" not in outline.edited_content
+            assert "教学目标" in outline.edited_content
+            assert "WHERE" in outline.edited_content
+            assert "IN关键字" in outline.edited_content
+            assert "重点" in outline.edited_content
+            assert "难点" in outline.edited_content
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_knowledge_outline_page_and_save_reviewed_content(tmp_path: Path) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _upload_sample_plan(client, course)
+        with session_factory() as session:
+            selected_id = session.scalar(select(PlannedLesson.id).order_by(PlannedLesson.id))
+            assert selected_id is not None
+        await client.post(
+            "/course-plan-uploads/1/confirm",
+            data={"planned_lesson_ids": str(selected_id)},
+            follow_redirects=False,
+        )
+        await client.post("/lessons/1/knowledge-outline/generate", follow_redirects=False)
+
+        page_response = await client.get("/lessons/1/knowledge-outline")
+
+        assert page_response.status_code == 200
+        assert "知识主干内容" in page_response.text
+        assert "mock-ai-v0.2" in page_response.text
+        assert "默认基于本课次下已添加资料生成" in page_response.text
+
+        save_response = await client.post(
+            "/knowledge-outlines/1/save",
+            data={"edited_content": "教师复核后的知识主干：保留 WHERE 条件查询重点。"},
+            follow_redirects=False,
+        )
+
+        assert save_response.status_code == 303
+        assert save_response.headers["location"] == "/lessons/1/knowledge-outline"
+        with session_factory() as session:
+            outline = session.get(KnowledgeOutline, 1)
+            assert outline is not None
+            assert outline.status == "reviewed"
+            assert outline.edited_content == "教师复核后的知识主干：保留 WHERE 条件查询重点。"
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
