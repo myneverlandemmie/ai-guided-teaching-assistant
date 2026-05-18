@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}课程列表{% endblock %}
+{% block content %}
+<h1>课程列表</h1>
+<p>当前页面提供 V0.2 课程计划上传入口；没有课程时系统会创建一个演示课程。</p>
+{% for course in courses %}
+  <section class="card">
+    <h2>{{ course.title }}</h2>
+    <p>学期：{{ course.semester }} ｜ 状态：<span class="status">{{ course.status }}</span></p>
+    <p><a href="/courses/{{ course.id }}/course-plan/upload">上传授课计划</a></p>
+  </section>
+{% endfor %}
+{% endblock %}
