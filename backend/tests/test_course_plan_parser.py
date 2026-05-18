@@ -39,6 +39,21 @@ def test_parse_lesson_code_and_title_with_chinese_colon_separator() -> None:
     assert lesson_title == "视图"
 
 
+
+
+def test_parse_lesson_code_and_title_with_long_title_and_later_chinese_colon() -> None:
+    lesson_code, lesson_title = parse_lesson_code_and_title("0102-数据库的范式 书面实验：设计商品销售系统数据库")
+
+    assert lesson_code == "0102"
+    assert lesson_title == "数据库的范式 书面实验：设计商品销售系统数据库"
+
+
+def test_parse_lesson_code_and_title_with_fullwidth_digits_and_english_colon() -> None:
+    lesson_code, lesson_title = parse_lesson_code_and_title("０１０２ : 数据库的范式")
+
+    assert lesson_code == "0102"
+    assert lesson_title == "数据库的范式"
+
 def test_parse_lesson_code_and_title_without_code() -> None:
     lesson_code, lesson_title = parse_lesson_code_and_title("MySQL 数据库概述")
 
@@ -109,3 +124,10 @@ def test_sample_xlsx_parses_28_planned_lessons() -> None:
     lessons = parse_course_plan_xlsx(SAMPLE_PLAN)
 
     assert len(lessons) == 28
+
+
+def test_sample_xlsx_second_lesson_code_is_0102() -> None:
+    lessons = parse_course_plan_xlsx(SAMPLE_PLAN)
+
+    assert lessons[1]["lesson_code"] == "0102"
+    assert lessons[1]["lesson_title"] == "数据库的范式\n书面实验：设计商品销售系统数据库"

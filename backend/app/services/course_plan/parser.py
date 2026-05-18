@@ -64,6 +64,12 @@ def _normalize_header(value: Any) -> str:
     return text.lstrip("*")
 
 
+def _to_halfwidth_digits(value: str) -> str:
+    """将全角数字转换为半角数字。"""
+
+    return value.translate(str.maketrans("０１２３４５６７８９", "0123456789"))
+
+
 def parse_lesson_code_and_title(content: Any) -> tuple[str, str]:
     """从教学内容中解析课次编码和课次标题。
 
@@ -81,14 +87,17 @@ def parse_lesson_code_and_title(content: Any) -> tuple[str, str]:
     if not content_text:
         return "", ""
 
-    # 业务规则：教学内容以 4 位数字开头时，将其作为课次编码。
-    match = re.match(r"^(\d{4})(?:\s*[-—：]\s*|\s+)?(.*)$", content_text)
-    if not match:
+    # 业务规则：教学内容以 4 位半角或全角数字开头时，将其作为课次编码。
+    code_match = re.match(r"^([0-9０-９]{4})", content_text)
+    if not code_match:
         return "", content_text
 
-    lesson_code = match.group(1)
-    title = match.group(2).strip() or content_text
-    return lesson_code, title
+    lesson_code = _to_halfwidth_digits(code_match.group(1))
+    title = content_text[code_match.end():].lstrip()
+    if title[:1] in {"-", "—", "：", ":"}:
+        title = title[1:].lstrip()
+
+    return lesson_code, title.strip() or content_text
 
 
 def detect_columns(headers: list[Any] | tuple[Any, ...]) -> dict[str, int]:
