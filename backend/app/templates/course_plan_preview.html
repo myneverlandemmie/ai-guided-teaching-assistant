@@ -12,35 +12,48 @@
   {% endif %}
 </section>
 
-<h2>planned lessons 只读预览</h2>
-<table>
-  <thead>
-    <tr>
-      <th>week</th>
-      <th>lesson_no</th>
-      <th>hours</th>
-      <th>lesson_code</th>
-      <th>lesson_title</th>
-      <th>content_raw</th>
-      <th>homework</th>
-      <th>notes</th>
-      <th>status</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for lesson in planned_lessons %}
+<h2>planned lessons 预览与选择</h2>
+<p>勾选的 planned lessons 会生成正式课次；未勾选的 planned lessons 会标记为 skipped。</p>
+<form method="post" action="/course-plan-uploads/{{ upload.id }}/confirm">
+  <table>
+    <thead>
       <tr>
-        <td>{{ lesson.week }}</td>
-        <td>{{ lesson.lesson_no }}</td>
-        <td>{{ lesson.hours }}</td>
-        <td>{{ lesson.lesson_code }}</td>
-        <td>{{ lesson.lesson_title }}</td>
-        <td>{{ lesson.content_raw }}</td>
-        <td>{{ lesson.homework }}</td>
-        <td>{{ lesson.notes }}</td>
-        <td>{{ lesson.status }}</td>
+        <th>选择生成正式课次</th>
+        <th>week</th>
+        <th>lesson_no</th>
+        <th>hours</th>
+        <th>lesson_code</th>
+        <th>lesson_title</th>
+        <th>content_raw</th>
+        <th>homework</th>
+        <th>notes</th>
+        <th>status</th>
       </tr>
-    {% endfor %}
-  </tbody>
-</table>
+    </thead>
+    <tbody>
+      {% for lesson in planned_lessons %}
+        <tr>
+          <td>
+            <input
+              type="checkbox"
+              name="planned_lesson_ids"
+              value="{{ lesson.id }}"
+              {% if lesson.status != "skipped" %}checked{% endif %}
+            >
+          </td>
+          <td>{{ lesson.week }}</td>
+          <td>{{ lesson.lesson_no }}</td>
+          <td>{{ lesson.hours }}</td>
+          <td>{{ lesson.lesson_code }}</td>
+          <td>{{ lesson.lesson_title }}</td>
+          <td>{{ lesson.content_raw }}</td>
+          <td>{{ lesson.homework }}</td>
+          <td>{{ lesson.notes }}</td>
+          <td>{{ lesson.status }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p><button type="submit">确认生成正式课次</button></p>
+</form>
 {% endblock %}

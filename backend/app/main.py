@@ -18,7 +18,8 @@ from app.db.base import create_database_tables
 from app.db.session import engine, get_db
 from app.models.course import Course
 from app.models.course_plan import CoursePlanUpload, PlannedLesson
-from app.services.course_plan.import_service import import_course_plan
+from app.models.lesson import Lesson
+from app.services.course_plan.import_service import create_lessons_from_confirmed_planned_lessons, import_course_plan
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
@@ -170,4 +171,66 @@ async def show_course_plan_preview(
             "planned_lessons": planned_lessons,
             "planned_lesson_count": len(planned_lessons),
         },
+    )
+
+@app.post("/course-plan-uploads/{upload_id}/confirm")
+async def confirm_course_plan_upload(
+    upload_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    """确认 planned lessons，并批量生成正式课次。"""
+
+    upload = db.scalar(
+        select(CoursePlanUpload)
+        .options(selectinload(CoursePlanUpload.planned_lessons))
+        .where(CoursePlanUpload.id == upload_id)
+    )
+    if upload is None:
+        raise HTTPException(status_code=404, detail="授课计划上传记录不存在")
+
+    form = await request.form()
+    selected_ids = {int(value) for value in form.getlist("planned_lesson_ids")}
+    planned_lessons = db.scalars(
+        select(PlannedLesson)
+        .where(PlannedLesson.course_plan_upload_id == upload.id)
+        .order_by(PlannedLesson.id)
+    ).all()
+
+    # 业务规则：选中的 planned lesson 进入正式课次；未选中的本轮标记为 skipped。
+    confirmed_ids: list[int] = []
+    for planned_lesson in planned_lessons:
+        if planned_lesson.id in selected_ids:
+            planned_lesson.status = "confirmed"
+            confirmed_ids.append(planned_lesson.id)
+        else:
+            planned_lesson.status = "skipped"
+    db.commit()
+
+    create_lessons_from_confirmed_planned_lessons(db, confirmed_ids)
+    return RedirectResponse(url=f"/courses/{upload.course_id}/lessons", status_code=303)
+
+
+@app.get("/courses/{course_id}/lessons", response_class=HTMLResponse)
+async def list_lessons(
+    course_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """显示课程正式课次列表。"""
+
+    course = db.get(Course, course_id)
+    if course is None:
+        raise HTTPException(status_code=404, detail="课程不存在")
+
+    lessons = db.scalars(
+        select(Lesson)
+        .where(Lesson.course_id == course.id)
+        .order_by(Lesson.id)
+    ).all()
+
+    return templates.TemplateResponse(
+        request,
+        "lessons.html",
+        {"course": course, "lessons": lessons, "lesson_count": len(lessons)},
     )
