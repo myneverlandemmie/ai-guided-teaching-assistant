@@ -46,9 +46,9 @@ The current version should focus on a complete SQL teaching workflow. Do not exp
 
 ## 第一阶段施工目标 / First Construction Target
 
-Implement the course plan import module.
+历史第一阶段目标是实现课程计划导入模块。当前该阶段已完成，并已继续完成到 Mock AI 知识主干生成。
 
-实现“课程计划上传与自动拆解课次”模块。
+后续 Codex 施工应基于当前实现状态继续，不要重复施工已完成模块。
 
 ### 功能要求 / Required Behavior
 
@@ -77,6 +77,67 @@ Implement the course plan import module.
 3. How to test / 测试方法
 4. Known limitations / 已知限制
 5. Next recommended step / 下一步建议
+
+## Current Baseline for Future Codex Rounds / 后续施工当前基线
+
+当前已实现：
+
+- 授课计划上传；
+- Excel 课程计划解析；
+- planned lessons 预览；
+- planned lessons 确认 / 跳过；
+- 批量生成正式 Lesson；
+- 正式课次列表；
+- 正式课次详情页；
+- 课次材料添加；
+- 粘贴文本；
+- `.txt` / `.md`；
+- `.docx` 基础文本提取；
+- `.pptx` 实验性文本提取；
+- 多文件上传；
+- 删除课次材料；
+- 默认材料标题；
+- 页面不显示服务器绝对路径；
+- Mock AI 知识主干生成；
+- 知识主干可编辑和保存；
+- 知识主干生成前对学校、教师、班级等行政信息做基础过滤；
+- 当前相关测试最后一次运行结果为 `50 passed`。
+
+当前未实现，后续施工不得误称已完成：
+
+- 完整注册 / 登录；
+- 测试教师账号、测试学生账号、测试班级；
+- 真实 AI API；
+- 小测题生成；
+- 导学案生成；
+- SQL 作业提交和自动批阅；
+- Python 批阅；
+- OCR；
+- PDF、图片、扫描件、旧版 `.doc/.ppt` 解析；
+- 复杂 Vue / React 前端。
+
+## Account and API Key Rules / 账号与 API Key 规则
+
+当前开发阶段暂用 demo course / demo teacher，不作为最终试用方式。
+
+V0.2 演示 / 部门内试用阶段必须提供：
+
+- 测试教师账号；
+- 测试学生账号；
+- 演示班级 / 测试班级；
+- 学生无需填写 API Key。
+
+真实 API Key 策略：
+
+- 教师使用自己的 API Key；
+- 平台不提供公共 Token；
+- 平台不做 Token 转售；
+- API Key 不应明文入库；
+- API Key 不应写入日志；
+- API Key 不应提交到 Git；
+- API Key 不能只存 hash，因为 hash 无法还原，不能用于真实 API 调用；
+- V0.2 推荐“教师登录后，会话级临时 API Key”，服务端内存临时保存，退出 / 清除 / 服务重启后失效；
+- 长期保存 Key 需要另行设计加密存储方案，不在当前阶段实现。
 
 ## Add-on Boundary / 加分原型边界
 

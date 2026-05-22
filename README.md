@@ -6,16 +6,18 @@
 
 V0.2 版本聚焦数据库 / SQL / MySQL 入门教学，目标是在半个月内完成一个可演示、可部署、可用于案例申报的教学闭环系统。
 
+截至当前文档基线，代码已经完成课程计划导入、课次确认、正式课次管理、课次材料上传与基础文本提取，以及 Mock AI 知识主干生成。SQL 自动批阅、真实 AI 导学案生成、小测题生成、学生端作业提交和完整登录注册仍属于后续施工内容。
+
 核心流程：
 
 1. 教师上传课程授课计划 Excel；
 2. 系统解析授课计划并自动拆解课次；
 3. 教师上传某一课次的教案或 PPT 文本；
-4. AI 生成知识主干、小测题和分层导学案；
-5. 学生查看导学案并提交 SQL 作业；
-6. 系统自动批阅 SQL；
-7. 教师复核并修正批阅结果；
-8. 系统生成学生学习总结。
+4. Mock AI 生成知识主干初稿，教师可编辑保存；
+5. 后续接入真实 AI 后生成小测题和分层导学案；
+6. 后续实现学生查看导学案并提交 SQL 作业；
+7. 后续实现系统自动批阅 SQL；
+8. 后续实现教师复核、学生反馈和学习总结。
 
 当前版本以 SQL / MySQL 为主线，Python 自动批阅与 OCR 拍照纠错作为后续版本扩展。
 
@@ -23,7 +25,7 @@ V0.2 版本聚焦数据库 / SQL / MySQL 入门教学，目标是在半个月内
 
 This repository contains the V0.2 implementation of an AI-guided SQL learning and assessment platform for vocational database courses.
 
-The current version focuses on SQL / MySQL. Python grading and OCR-based screenshot correction are reserved for future versions.
+The current codebase has implemented course plan import, lesson confirmation, lesson material upload, basic `.docx` / `.pptx` text extraction, and Mock AI knowledge outline generation. Real AI generation, SQL grading, student assignment submission, and full authentication are still planned work.
 
 ## 三层使用模式 / Three Usage Modes
 
@@ -48,6 +50,71 @@ This project does not encourage external teachers to use the project owner's dem
 - Deployment / 部署：Alibaba Cloud ECS for project demo; private deployment for real use / 项目演示用阿里云 ECS，真实使用建议私有部署
 - Demo lesson / 演示课：SELECT + WHERE
 - Documentation / 文档：Chinese-first bilingual documentation / 中文优先的双语文档
+
+## Current Baseline / 当前实现基线
+
+已实现：
+
+- `.xlsx` 授课计划上传；
+- Excel 课程计划解析，样例计划可解析出 28 个 planned lessons；
+- planned lessons 预览；
+- planned lessons 确认 / 跳过；
+- 批量生成正式 Lesson；
+- 正式课次列表；
+- 正式课次详情页；
+- 课次材料添加；
+- 粘贴文本材料；
+- `.txt` / `.md` 材料读取；
+- `.docx` 基础文本提取，包括段落和表格单元格；
+- `.pptx` 实验性文本提取，包括文本框和表格文本；
+- 多文件上传；
+- 删除课次材料；
+- 默认材料标题；
+- 教师页面不显示服务器绝对路径；
+- Mock AI 知识主干生成；
+- 知识主干编辑和保存；
+- 知识主干生成前对学校、教师、班级等行政信息做基础过滤；
+- 当前相关自动化测试最后一次运行结果为 `50 passed`。
+
+当前未实现：
+
+- 完整注册 / 登录；
+- 教师账号、学生账号、班级管理；
+- 真实 AI API 调用；
+- 导学案生成；
+- 小测题生成；
+- SQL 作业提交与自动批阅；
+- Python 批阅；
+- OCR、PDF、图片或扫描件解析；
+- 复杂 Vue / React 前端。
+
+当前开发阶段暂用 demo course / demo teacher 作为临时上下文，不作为最终试用方式。
+
+## Trial and Account Strategy / 试用账号策略
+
+开发阶段：
+
+- 暂用 demo course / demo teacher；
+- 不作为最终部门内试用或外部演示方式。
+
+V0.2 演示 / 部门内试用阶段：
+
+- 提供测试教师账号；
+- 提供测试学生账号；
+- 第一个班级使用“演示班级”或“测试班级”；
+- 教师可创建测试班级；
+- 学生使用测试账号进入班级查看导学内容或提交演示作业；
+- 学生不需要填写 API Key。
+
+API Key 策略：
+
+- 教师使用自己的 API Key；
+- 平台不提供公共 Token；
+- 平台不做 Token 转售；
+- API Key 不应明文入库、写入日志或提交到 Git；
+- API Key 不能只存 hash，因为 hash 无法还原，不能用于真实 API 调用；
+- V0.2 推荐“教师登录后，会话级临时 API Key”，服务端内存临时保存，退出 / 清除 / 服务重启后失效；
+- 若后续需要长期保存 Key，应另行设计加密存储方案，不在当前阶段实现。
 
 ## 首次 Git 命令 / First Git Commands
 

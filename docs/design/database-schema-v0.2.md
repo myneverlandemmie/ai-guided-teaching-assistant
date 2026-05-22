@@ -77,6 +77,17 @@ V0.2 主要包含以下数据实体：
 | learning_summaries | 学习总结 |
 | ai_generation_logs | AI 生成记录 |
 
+当前代码已经落地的模型包括：
+
+- `Course`
+- `CoursePlanUpload`
+- `PlannedLesson`
+- `Lesson`
+- `LessonMaterial`
+- `KnowledgeOutline`
+
+当前仍为设计预留、尚未在代码中完整实现的实体包括：`users`、`classes`、`class_members`、`quizzes`、`guidebooks`、`assignments`、`submissions`、`grading_results`、`learning_summaries`、`ai_generation_logs`、`programming_assignments`、`programming_submissions`、`grading_annotations`。
+
 ## 5. Tables / 数据表设计
 
 ## 5.1 users / 用户表
@@ -253,9 +264,15 @@ V0.2 主要包含以下数据实体：
 
 说明：
 
-- V0.2 优先支持粘贴文本或上传可解析文本。
-- PPT 原文件解析可以后续增强，当前可以先要求教师提供 PPT 文本或摘要。
-- AI 生成知识主干时应引用该表内容。
+- 当前已支持粘贴文本；
+- 当前已支持 `.txt` / `.md`；
+- 当前已支持 `.docx` 基础文本提取，包括普通段落和表格单元格；
+- 当前实验性支持 `.pptx` 文本提取，包括文本框和表格单元格；
+- 当前支持多文件上传和删除材料；
+- 当前支持默认材料标题；
+- 教师页面不显示服务器绝对路径，只显示原始文件名或 basename；
+- 当前不支持 PDF、图片、扫描件、旧版 `.doc/.ppt`；
+- AI / Mock AI 生成知识主干时引用该表内容，但生成前应过滤学校、教师、班级等行政信息。
 
 ## 5.9 knowledge_outlines / 知识主干表
 
@@ -277,6 +294,28 @@ V0.2 主要包含以下数据实体：
 - ai_raw_output 和 edited_content 应同时保留。
 - 学生端只能看到教师确认后的内容。
 - 后续小测题和导学案生成应优先基于 edited_content。
+- 当前已实现 Mock AI 知识主干生成，`generated_by_model` 使用 `mock-ai-v0.2`。
+- 当前已实现教师编辑和保存，保存后状态可变为 `reviewed`。
+- 当前未接真实 AI API，因此不得把 Mock 知识主干描述为最终案例中的真实 AI 生成成果。
+- 当前生成前会对材料中的学校、教研组、任课教师、授课班级、授课地点、授课日期、学号、姓名、手机号、身份证号等信息做基础过滤。
+- 过滤只用于生成知识主干，不修改原始 `lesson_materials.content`。
+
+## 5.9.1 API Key Storage Boundary / API Key 存储边界
+
+当前数据库不应新增明文 API Key 字段。
+
+V0.2 推荐策略：
+
+- 教师使用自己的 API Key；
+- 平台不提供公共 Token；
+- 平台不做 Token 转售；
+- 学生不需要填写 API Key；
+- API Key 不应明文入库；
+- API Key 不应写入日志；
+- API Key 不应提交到 Git；
+- API Key 不能只存 hash，因为 hash 无法还原，不能用于真实 API 调用；
+- V0.2 推荐“教师登录后，会话级临时 API Key”，服务端内存临时保存，退出 / 清除 / 服务重启后失效；
+- 若后续需要长期保存 Key，应另行设计加密存储方案，例如应用层加密、密钥轮换和访问审计，不在当前阶段实现。
 
 ## 5.10 quizzes / 小测题表
 
