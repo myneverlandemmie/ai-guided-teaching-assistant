@@ -32,8 +32,11 @@ V0.2 需要从 Mock AI 过渡到可用于案例展示和部门内试用的真实
 
 - `AI_PROVIDER=deepseek` 为正式默认路径；
 - `AI_PROVIDER=mock` 仅用于单元测试或显式本地开发；
-- DeepSeek 默认模型为 `deepseek-v4-pro`；
-- 可通过 `DEEPSEEK_MODEL=deepseek-v4-flash` 切换；
+- DeepSeek 模型选项由 `DEEPSEEK_ALLOWED_MODELS` 配置；
+- DeepSeek 默认模型由 `DEEPSEEK_DEFAULT_MODEL` 配置；
+- 教师可在 `/ai/settings` 页面选择当前会话使用的知识主干生成模型；
+- 模型选择只保存在服务端内存会话中，不写数据库、不写 cookie、不写日志；
+- 清除 API Key 时同时清除模型选择；
 - 不使用 `deepseek-chat` 或 `deepseek-reasoner`。
 
 没有 API Key 时不能 silent fallback 到 Mock。原因是 Mock 只用于测试或显式本地开发，正式案例成果必须来自教师自行配置的真实 API。
@@ -65,9 +68,18 @@ V0.2 需要从 Mock AI 过渡到可用于案例展示和部门内试用的真实
 - 清除 Key 时删除临时 session cookie，避免旧 session_id 继续复用；
 - 校验 session_id 格式，降低 session fixation 风险；
 - DeepSeek HTTP 异常不保留可能携带 Authorization header 的 httpx request 异常链；
-- DeepSeek 模型限制为 `deepseek-v4-pro` / `deepseek-v4-flash`，拒绝 `deepseek-chat`、`deepseek-reasoner` 和未知模型；
+- DeepSeek 模型列表从环境变量读取，但 V0.2 只允许 `deepseek-v4-flash` / `deepseek-v4-pro`，拒绝 `deepseek-chat`、`deepseek-reasoner` 和未知模型；
 - 知识主干生成路由用 threadpool 执行同步 Provider，避免阻塞 async route；
 - 生成 prompt 前进行共享脱敏和轻量材料选择。
+
+第 9.0 轮进一步固化知识主干 Prompt 模板：
+
+- 输出是教师审阅用草稿，不是自动定稿内容；
+- 模板包含课程思政与职业素养融入点；
+- 模板包含可测知识点与题型蓝图，但不生成正式测评；
+- 模板包含补充内容建议和 AI 草稿声明；
+- 课程思政内容必须有依据，严禁编造政策文件、政策原文、标准编号、真实企业案例或真实数据来源；
+- 补充内容建议仅为参考方向，必须由教师人工筛选、修改和确认。
 
 V0.2 暂不做生产级凭据管理。若后续需要生产化多实例部署，应使用 Redis 等服务端临时存储，并配合加密、过期、轮换和审计机制。
 

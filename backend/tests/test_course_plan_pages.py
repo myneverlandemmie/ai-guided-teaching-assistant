@@ -20,7 +20,10 @@ from app.services.ai.deepseek_client import (
     DeepSeekProviderError,
     build_knowledge_outline_prompt,
     generate_deepseek_knowledge_outline,
+    get_allowed_deepseek_models,
     get_deepseek_config,
+    get_default_deepseek_model,
+    is_allowed_deepseek_model,
 )
 from app.services.ai.provider import GeneratedOutline
 from app.services.ai.sanitizer import sanitize_text_for_outline
@@ -29,6 +32,7 @@ from app.services.ai.session_key_store import (
     clear_all_session_api_keys_for_tests,
     clear_session_api_key,
     get_session_api_key,
+    get_session_selected_model,
     get_session_store_size_for_tests,
     has_session_api_key_for_tests,
     set_session_api_key,
@@ -119,16 +123,19 @@ def test_session_api_key_store_expires_and_clears(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(session_key_store, "_now", lambda: current_time[0])
     session_id = "A" * 40
 
-    set_session_api_key(session_id, "sk-" + "x" * 16 + "1111")
+    set_session_api_key(session_id, "sk-" + "x" * 16 + "1111", "deepseek-v4-flash")
 
     assert get_session_api_key(session_id) is not None
+    assert get_session_selected_model(session_id) == "deepseek-v4-flash"
     current_time[0] = 111.0
     assert get_session_api_key(session_id) is None
+    assert get_session_selected_model(session_id) is None
     assert has_session_api_key_for_tests(session_id) is False
 
-    set_session_api_key(session_id, "sk-" + "x" * 16 + "2222")
+    set_session_api_key(session_id, "sk-" + "x" * 16 + "2222", "deepseek-v4-pro")
     clear_session_api_key(session_id)
     assert get_session_api_key(session_id) is None
+    assert get_session_selected_model(session_id) is None
 
 
 def test_session_api_key_store_capacity_and_invalid_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -978,10 +985,20 @@ async def test_ai_settings_can_set_mask_and_clear_session_key(tmp_path: Path) ->
         assert page_response.status_code == 200
         assert "状态：未设置" in page_response.text
         assert "API Key 仅保存在当前浏览器会话" in page_response.text
+        assert "deepseek-v4-flash" in page_response.text
+        assert "deepseek-v4-pro" in page_response.text
+        assert "deepseek-chat" not in page_response.text
+        assert "deepseek-reasoner" not in page_response.text
+        assert "DEEPSEEK_ALLOWED_MODELS" in page_response.text
+        assert "DEEPSEEK_DEFAULT_MODEL" in page_response.text
+        assert "项目根目录" in page_response.text
+        assert ".env.example" in page_response.text
+        assert "https://api-docs.deepseek.com/zh-cn/api/list-models" in page_response.text
+        assert "https://api-docs.deepseek.com/zh-cn/api/create-chat-completion" in page_response.text
 
         save_response = await client.post(
             "/ai/settings",
-            data={"api_key": "sk-test-secret-abcd"},
+            data={"api_key": "sk-test-secret-abcd", "selected_model": "deepseek-v4-flash"},
             headers=SAME_ORIGIN_HEADERS,
         )
         assert save_response.status_code == 200
@@ -991,11 +1008,13 @@ async def test_ai_settings_can_set_mask_and_clear_session_key(tmp_path: Path) ->
         old_session_id = client.cookies.get(SESSION_COOKIE_NAME)
         assert old_session_id is not None
         assert has_session_api_key_for_tests(old_session_id) is True
+        assert get_session_selected_model(old_session_id) == "deepseek-v4-flash"
 
         clear_redirect = await client.post("/ai/settings/clear", headers=SAME_ORIGIN_HEADERS, follow_redirects=False)
         assert clear_redirect.status_code == 303
         assert "Max-Age=0" in clear_redirect.headers.get("set-cookie", "")
         assert has_session_api_key_for_tests(old_session_id) is False
+        assert get_session_selected_model(old_session_id) is None
 
         clear_response = await client.get("/ai/settings")
         assert clear_response.status_code == 200
@@ -1032,7 +1051,7 @@ async def test_ai_settings_safe_next_redirects_after_saving_key(tmp_path: Path) 
 
         save_response = await client.post(
             "/ai/settings",
-            data={"api_key": fake_key, "next": "/lessons/1"},
+            data={"api_key": fake_key, "selected_model": "deepseek-v4-pro", "next": "/lessons/1"},
             headers=SAME_ORIGIN_HEADERS,
             follow_redirects=False,
         )
@@ -1064,7 +1083,7 @@ async def test_ai_settings_rejects_unsafe_next_without_echo_or_external_redirect
 
             save_response = await client.post(
                 "/ai/settings",
-                data={"api_key": fake_key, "next": unsafe_next},
+                data={"api_key": fake_key, "selected_model": "deepseek-v4-flash", "next": unsafe_next},
                 headers=SAME_ORIGIN_HEADERS,
                 follow_redirects=False,
             )
@@ -1087,7 +1106,7 @@ async def test_ai_settings_next_keeps_same_origin_protection(tmp_path: Path) -> 
     try:
         response = await client.post(
             "/ai/settings",
-            data={"api_key": fake_key, "next": "/lessons/1"},
+            data={"api_key": fake_key, "selected_model": "deepseek-v4-flash", "next": "/lessons/1"},
             headers={"origin": "http://evil.example"},
             follow_redirects=False,
         )
@@ -1095,6 +1114,27 @@ async def test_ai_settings_next_keeps_same_origin_protection(tmp_path: Path) -> 
         assert response.status_code == 403
         assert fake_key not in response.text
         assert response.headers.get("location") is None
+        assert get_session_store_size_for_tests() == 0
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_ai_settings_rejects_invalid_selected_model_without_saving_key(tmp_path: Path) -> None:
+    client, _ = _build_test_client(tmp_path)
+    fake_key = "sk-" + "v" * 16 + "1212"
+    try:
+        response = await client.post(
+            "/ai/settings",
+            data={"api_key": fake_key, "selected_model": "deepseek-chat"},
+            headers=SAME_ORIGIN_HEADERS,
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 400
+        assert "模型配置无效" in response.text
+        assert fake_key not in response.text
         assert get_session_store_size_for_tests() == 0
     finally:
         await client.aclose()
@@ -1124,7 +1164,11 @@ async def test_api_key_is_not_written_to_database(tmp_path: Path) -> None:
     client, session_factory = _build_test_client(tmp_path)
     fake_key = "sk-" + "d" * 16 + "3333"
     try:
-        response = await client.post("/ai/settings", data={"api_key": fake_key}, headers=SAME_ORIGIN_HEADERS)
+        response = await client.post(
+            "/ai/settings",
+            data={"api_key": fake_key, "selected_model": "deepseek-v4-pro"},
+            headers=SAME_ORIGIN_HEADERS,
+        )
 
         assert response.status_code == 200
         assert fake_key not in response.text
@@ -1135,6 +1179,7 @@ async def test_api_key_is_not_written_to_database(tmp_path: Path) -> None:
             assert key_tables == []
             assert session.scalar(select(KnowledgeOutline)) is None
             assert _database_contains_text(session, fake_key) is False
+            assert _database_contains_text(session, "deepseek-v4-pro") is False
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
@@ -1147,7 +1192,7 @@ async def test_ai_settings_rejects_cross_origin_without_setting_key(tmp_path: Pa
     try:
         response = await client.post(
             "/ai/settings",
-            data={"api_key": fake_key},
+            data={"api_key": fake_key, "selected_model": "deepseek-v4-flash"},
             headers={"origin": "http://evil.example"},
         )
 
@@ -1232,12 +1277,18 @@ async def test_deepseek_generation_uses_provider_and_saves_outline(
     monkeypatch.setenv("AI_PROVIDER", "deepseek")
     captured: dict[str, object] = {}
 
-    def fake_generate(lesson: Lesson, materials: list[LessonMaterial], api_key: str | None) -> GeneratedOutline:
+    def fake_generate(
+        lesson: Lesson,
+        materials: list[LessonMaterial],
+        api_key: str | None,
+        selected_model: str | None = None,
+    ) -> GeneratedOutline:
         captured["lesson_title"] = lesson.title
         captured["material_text"] = "\n".join(material.content for material in materials)
         captured["has_api_key"] = bool(api_key)
         captured["api_key_tail"] = api_key[-4:] if api_key else ""
-        return GeneratedOutline("真实 Provider 测试返回：WHERE 与 IN关键字 知识主干。", "deepseek-v4-flash")
+        captured["selected_model"] = selected_model
+        return GeneratedOutline("真实 Provider 测试返回：WHERE 与 IN关键字 知识主干。", selected_model or "deepseek-v4-flash")
 
     monkeypatch.setattr(main.ai_provider, "generate_knowledge_outline_with_provider", fake_generate)
     client, session_factory = _build_test_client(tmp_path)
@@ -1261,7 +1312,11 @@ async def test_deepseek_generation_uses_provider_and_saves_outline(
             },
             follow_redirects=False,
         )
-        await client.post("/ai/settings", data={"api_key": "sk-provider-test-abcd"}, headers=SAME_ORIGIN_HEADERS)
+        await client.post(
+            "/ai/settings",
+            data={"api_key": "sk-provider-test-abcd", "selected_model": "deepseek-v4-pro"},
+            headers=SAME_ORIGIN_HEADERS,
+        )
 
         response = await client.post(
             "/lessons/1/knowledge-outline/generate",
@@ -1273,11 +1328,12 @@ async def test_deepseek_generation_uses_provider_and_saves_outline(
         assert response.headers["location"] == "/lessons/1/knowledge-outline"
         assert captured["has_api_key"] is True
         assert captured["api_key_tail"] == "abcd"
+        assert captured["selected_model"] == "deepseek-v4-pro"
         assert "WHERE" in str(captured["material_text"])
         with session_factory() as session:
             outline = session.scalar(select(KnowledgeOutline))
             assert outline is not None
-            assert outline.generated_by_model == "deepseek-v4-flash"
+            assert outline.generated_by_model == "deepseek-v4-pro"
             assert outline.status == "draft"
             assert outline.ai_raw_output == "真实 Provider 测试返回：WHERE 与 IN关键字 知识主干。"
             assert outline.edited_content == outline.ai_raw_output
@@ -1294,7 +1350,12 @@ async def test_deepseek_generation_error_does_not_save_outline_or_expose_key(
     monkeypatch.setenv("AI_PROVIDER", "deepseek")
     fake_key = "sk-" + "e" * 16 + "6666"
 
-    def fake_generate(lesson: Lesson, materials: list[LessonMaterial], api_key: str | None) -> GeneratedOutline:
+    def fake_generate(
+        lesson: Lesson,
+        materials: list[LessonMaterial],
+        api_key: str | None,
+        selected_model: str | None = None,
+    ) -> GeneratedOutline:
         raise DeepSeekProviderError("DeepSeek 请求超时，请稍后重试或减少材料长度。")
 
     monkeypatch.setattr(main.ai_provider, "generate_knowledge_outline_with_provider", fake_generate)
@@ -1310,7 +1371,11 @@ async def test_deepseek_generation_error_does_not_save_outline_or_expose_key(
             data={"planned_lesson_ids": str(selected_id)},
             follow_redirects=False,
         )
-        await client.post("/ai/settings", data={"api_key": fake_key}, headers=SAME_ORIGIN_HEADERS)
+        await client.post(
+            "/ai/settings",
+            data={"api_key": fake_key, "selected_model": "deepseek-v4-flash"},
+            headers=SAME_ORIGIN_HEADERS,
+        )
 
         response = await client.post(
             "/lessons/1/knowledge-outline/generate",
@@ -1364,12 +1429,24 @@ async def test_invalid_ai_provider_shows_safe_error_without_outline(
 
 
 @pytest.mark.anyio
-async def test_invalid_deepseek_model_shows_safe_error_without_outline(
+async def test_deepseek_generation_uses_flash_selected_model(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("AI_PROVIDER", "deepseek")
-    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-chat")
+    captured: dict[str, object] = {}
+
+    def fake_generate(
+        lesson: Lesson,
+        materials: list[LessonMaterial],
+        api_key: str | None,
+        selected_model: str | None = None,
+    ) -> GeneratedOutline:
+        captured["has_api_key"] = bool(api_key)
+        captured["selected_model"] = selected_model
+        return GeneratedOutline("flash 模型测试返回。", selected_model or "deepseek-v4-flash")
+
+    monkeypatch.setattr(main.ai_provider, "generate_knowledge_outline_with_provider", fake_generate)
     client, session_factory = _build_test_client(tmp_path)
     course = _create_course(session_factory)
     try:
@@ -1382,7 +1459,11 @@ async def test_invalid_deepseek_model_shows_safe_error_without_outline(
             data={"planned_lesson_ids": str(selected_id)},
             follow_redirects=False,
         )
-        await client.post("/ai/settings", data={"api_key": "sk-" + "m" * 16 + "7777"}, headers=SAME_ORIGIN_HEADERS)
+        await client.post(
+            "/ai/settings",
+            data={"api_key": "sk-" + "m" * 16 + "7777", "selected_model": "deepseek-v4-flash"},
+            headers=SAME_ORIGIN_HEADERS,
+        )
 
         response = await client.post(
             "/lessons/1/knowledge-outline/generate",
@@ -1390,10 +1471,13 @@ async def test_invalid_deepseek_model_shows_safe_error_without_outline(
             follow_redirects=False,
         )
 
-        assert response.status_code == 400
-        assert "模型配置无效" in response.text
+        assert response.status_code == 303
+        assert captured["has_api_key"] is True
+        assert captured["selected_model"] == "deepseek-v4-flash"
         with session_factory() as session:
-            assert session.scalar(select(KnowledgeOutline)) is None
+            outline = session.scalar(select(KnowledgeOutline))
+            assert outline is not None
+            assert outline.generated_by_model == "deepseek-v4-flash"
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
@@ -1445,8 +1529,64 @@ def test_deepseek_prompt_filters_sensitive_material_information() -> None:
     assert "难点" in prompt
 
 
+def test_knowledge_outline_prompt_contains_fixed_sections_and_disclaimers() -> None:
+    lesson = Lesson(
+        course_id=1,
+        planned_lesson_id=None,
+        week="1",
+        lesson_no="1",
+        hours="2",
+        lesson_code="0402",
+        title="WHERE 条件查询",
+        content_summary="条件查询。",
+        status="draft",
+    )
+    material = LessonMaterial(
+        lesson_id=1,
+        material_type="pasted_text",
+        title="虚构材料",
+        content="\n".join(
+            [
+                "学校：示例学校",
+                "任课教师：张老师",
+                "授课班级：23物联网2班",
+                "教学目标：掌握 WHERE 条件查询。",
+                "重点：理解数据筛选条件。",
+            ]
+        ),
+    )
+
+    prompt = build_knowledge_outline_prompt(lesson, [material])
+
+    for section in [
+        "本节课定位",
+        "学习目标",
+        "核心知识点",
+        "知识结构",
+        "重点与难点",
+        "课程思政与职业素养融入点",
+        "学生易错点",
+        "课堂任务建议",
+        "可测知识点与题型蓝图",
+        "补充内容建议",
+        "教师使用提示",
+        "AI 草稿声明",
+    ]:
+        assert section in prompt
+    assert "审阅、修改与确认" in prompt
+    assert "严禁编造政策文件、政策原文、标准编号、行业规范条款、真实企业案例、真实数据来源" in prompt
+    assert "以上课程思政与职业素养融入点为 AI 根据当前材料生成的参考建议" in prompt
+    assert "以上题型蓝图仅供教师设计小测时参考" in prompt
+    assert "必须至少包含 1 条与本节相关的课程思政 / 职业素养测试方向" in prompt
+    assert "以上补充建议为 AI 根据当前材料生成的参考方向" in prompt
+    assert "不得输出学校、教师姓名、真实班级等行政信息" in prompt
+    assert "示例学校" not in prompt
+    assert "张老师" not in prompt
+    assert "23物联网2班" not in prompt
+
+
 def test_deepseek_prompt_prioritizes_key_material_and_limits_length(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("AI_PROMPT_MATERIAL_MAX_CHARS", "900")
+    monkeypatch.setenv("AI_PROMPT_MATERIAL_MAX_CHARS", "9000")
     lesson = Lesson(
         course_id=1,
         planned_lesson_id=None,
@@ -1474,25 +1614,44 @@ def test_deepseek_prompt_prioritizes_key_material_and_limits_length(monkeypatch:
 
     prompt = build_knowledge_outline_prompt(lesson, [material])
 
-    assert len(prompt) <= 900
+    assert len(prompt) <= 9000
     assert "教学目标" in prompt
     assert "实验步骤" in prompt
     assert "SQL" in prompt
     assert "示例学校" not in prompt
 
 
-def test_deepseek_config_rejects_deprecated_or_unknown_models(monkeypatch: pytest.MonkeyPatch) -> None:
-    for model_name in ["deepseek-chat", "deepseek-reasoner", "unknown-model"]:
-        monkeypatch.setenv("DEEPSEEK_MODEL", model_name)
-        with pytest.raises(DeepSeekProviderError):
-            get_deepseek_config()
+def test_deepseek_model_config_parses_allowed_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(
+        "DEEPSEEK_ALLOWED_MODELS",
+        " deepseek-v4-flash,deepseek-v4-pro,,deepseek-v4-flash,deepseek-chat,deepseek-reasoner,unknown-model ",
+    )
+    monkeypatch.setenv("DEEPSEEK_DEFAULT_MODEL", "deepseek-v4-pro")
+
+    assert get_allowed_deepseek_models() == ["deepseek-v4-flash", "deepseek-v4-pro"]
+    assert get_default_deepseek_model() == "deepseek-v4-pro"
+    assert is_allowed_deepseek_model("deepseek-v4-flash") is True
+    assert is_allowed_deepseek_model("deepseek-v4-pro") is True
+    assert is_allowed_deepseek_model("deepseek-chat") is False
+    assert is_allowed_deepseek_model("deepseek-reasoner") is False
+    assert is_allowed_deepseek_model("unknown-model") is False
+
+
+def test_deepseek_model_config_falls_back_when_env_is_invalid(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEEPSEEK_ALLOWED_MODELS", "deepseek-chat,unknown-model,,")
+    monkeypatch.setenv("DEEPSEEK_DEFAULT_MODEL", "unknown-model")
+
+    assert get_allowed_deepseek_models() == ["deepseek-v4-flash", "deepseek-v4-pro"]
+    assert get_default_deepseek_model() == "deepseek-v4-flash"
+    assert get_deepseek_config().model == "deepseek-v4-flash"
+    with pytest.raises(DeepSeekProviderError):
+        get_deepseek_config("deepseek-chat")
 
 
 def test_deepseek_config_accepts_v4_models_and_invalid_timeout_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AI_REQUEST_TIMEOUT_SECONDS", "bad")
     for model_name in ["deepseek-v4-pro", "deepseek-v4-flash"]:
-        monkeypatch.setenv("DEEPSEEK_MODEL", model_name)
-        config = get_deepseek_config()
+        config = get_deepseek_config(model_name)
         assert config.model == model_name
         assert config.timeout_seconds == 60.0
 
@@ -1582,6 +1741,11 @@ async def test_can_generate_mock_knowledge_outline_without_materials(tmp_path: P
             assert outline.ai_raw_output == outline.edited_content
             assert lesson.title in outline.edited_content
             assert "当前课次尚未添加教学材料" in outline.edited_content
+            assert "## 6. 课程思政与职业素养融入点" in outline.edited_content
+            assert "## 9. 可测知识点与题型蓝图" in outline.edited_content
+            assert "## 10. 补充内容建议" in outline.edited_content
+            assert "## 12. AI 草稿声明" in outline.edited_content
+            assert "仅供教师参考，需教师审阅、修改与确认" in outline.edited_content
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()

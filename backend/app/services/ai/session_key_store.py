@@ -22,6 +22,7 @@ class SessionApiKeyRecord:
     """内存中的会话 Key 记录，repr 不包含 API Key。"""
 
     api_key: str = field(repr=False)
+    selected_model: str | None
     created_at: float
     last_used_at: float
 
@@ -145,8 +146,8 @@ def _enforce_capacity_locked() -> None:
         _session_api_keys.pop(session_id, None)
 
 
-def set_session_api_key(session_id: str, api_key: str) -> None:
-    """为当前会话保存临时 API Key。"""
+def set_session_api_key(session_id: str, api_key: str, selected_model: str | None = None) -> None:
+    """为当前会话保存临时 API Key 和模型选择。"""
 
     if not is_valid_session_id(session_id):
         return
@@ -157,6 +158,7 @@ def set_session_api_key(session_id: str, api_key: str) -> None:
     with _store_lock:
         _session_api_keys[session_id] = SessionApiKeyRecord(
             api_key=cleaned_key,
+            selected_model=selected_model,
             created_at=now,
             last_used_at=now,
         )
@@ -179,6 +181,42 @@ def get_session_api_key(session_id: str | None) -> str | None:
             return None
         record.last_used_at = now
         return record.api_key
+
+
+def get_session_selected_model(session_id: str | None) -> str | None:
+    """读取当前会话选择的模型，未过期时更新 last_used_at。"""
+
+    if not is_valid_session_id(session_id):
+        return None
+    cleanup_expired_session_api_keys()
+    now = _now()
+    with _store_lock:
+        record = _session_api_keys.get(str(session_id))
+        if record is None:
+            return None
+        if _is_expired(record, now):
+            _session_api_keys.pop(str(session_id), None)
+            return None
+        record.last_used_at = now
+        return record.selected_model
+
+
+def get_session_ai_settings(session_id: str | None) -> tuple[str | None, str | None]:
+    """读取当前会话 API Key 和模型选择。"""
+
+    if not is_valid_session_id(session_id):
+        return None, None
+    cleanup_expired_session_api_keys()
+    now = _now()
+    with _store_lock:
+        record = _session_api_keys.get(str(session_id))
+        if record is None:
+            return None, None
+        if _is_expired(record, now):
+            _session_api_keys.pop(str(session_id), None)
+            return None, None
+        record.last_used_at = now
+        return record.api_key, record.selected_model
 
 
 def clear_session_api_key(session_id: str | None) -> None:

@@ -15,10 +15,11 @@
   {% endif %}
   <p>API Key 仅保存在当前浏览器会话对应的服务端内存中，不写入数据库，不会回显完整 Key。关闭会话、主动清除或服务重启后会失效。</p>
   <p>本系统不提供公共 Token，不做 Token 转售。公网部署时建议启用 HTTPS。</p>
+  <p>当前默认模型：{{ default_model }}</p>
 </section>
 
 <section class="card">
-  <h2>设置当前会话 Key</h2>
+  <h2>设置当前会话 Key 和模型</h2>
   <form method="post" action="/ai/settings">
     {% if next_path %}
       <input type="hidden" name="next" value="{{ next_path }}">
@@ -26,10 +27,33 @@
     {% endif %}
     <label for="api_key">DeepSeek API Key</label><br>
     <input id="api_key" name="api_key" type="password" autocomplete="off" style="width:100%; max-width: 36rem;" required>
+    <p>
+      <label for="selected_model">知识主干生成模型</label><br>
+      <select id="selected_model" name="selected_model">
+        {% for model in allowed_models %}
+          <option value="{{ model }}" {% if model == selected_model %}selected{% endif %}>
+            {{ model }}{% if model == "deepseek-v4-flash" %}：速度快、成本低，适合试用{% elif model == "deepseek-v4-pro" %}：质量优先，适合正式生成{% endif %}
+          </option>
+        {% endfor %}
+      </select>
+    </p>
     <p><button type="submit">保存到当前会话</button></p>
   </form>
   <form method="post" action="/ai/settings/clear">
     <button type="submit">清除当前 Key</button>
   </form>
+</section>
+
+<section class="card">
+  <h2>模型配置说明</h2>
+  <p>模型列表由服务端环境变量 <code>DEEPSEEK_ALLOWED_MODELS</code> 配置，默认模型由 <code>DEEPSEEK_DEFAULT_MODEL</code> 配置。</p>
+  <p>本地开发时通常在项目根目录 <code>.env</code> 中配置，示例变量见 <code>.env.example</code>；生产部署时建议使用服务器环境变量。</p>
+  <p>请不要在 <code>.env</code>、<code>.env.example</code>、日志或 Git 中提交真实 API Key。如 DeepSeek 官方模型名称变化，可由管理员更新环境变量后重启服务。</p>
+  <p>
+    DeepSeek 官方文档：
+    <a href="https://api-docs.deepseek.com/zh-cn/api/list-models" target="_blank" rel="noopener noreferrer">模型列表</a>
+    ｜
+    <a href="https://api-docs.deepseek.com/zh-cn/api/create-chat-completion" target="_blank" rel="noopener noreferrer">Chat Completion</a>
+  </p>
 </section>
 {% endblock %}

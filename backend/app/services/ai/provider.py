@@ -30,6 +30,7 @@ def generate_knowledge_outline_with_provider(
     lesson: Lesson,
     materials: list[LessonMaterial],
     api_key: str | None,
+    selected_model: str | None = None,
     provider_name: str | None = None,
 ) -> GeneratedOutline:
     """根据配置调用 Mock 或 DeepSeek 生成知识主干。
@@ -38,6 +39,7 @@ def generate_knowledge_outline_with_provider(
         lesson: 当前课次。
         materials: 当前课次材料。
         api_key: DeepSeek 模式下必需的当前会话 API Key。
+        selected_model: 教师当前会话选择的 DeepSeek 模型。
         provider_name: 可选 provider 名称，测试可显式传入。
 
     Returns:
@@ -54,7 +56,13 @@ def generate_knowledge_outline_with_provider(
     if active_provider == "deepseek":
         if not api_key:
             raise DeepSeekProviderError("请先设置当前会话 DeepSeek API Key，再生成知识主干。")
-        content, model_name = generate_deepseek_knowledge_outline(lesson, materials, api_key, get_deepseek_config())
+        content, model_name = generate_deepseek_knowledge_outline(
+            lesson,
+            materials,
+            api_key,
+            selected_model,
+            get_deepseek_config(selected_model),
+        )
         return GeneratedOutline(content, model_name)
 
     raise DeepSeekProviderError("AI Provider 配置无效，请使用 deepseek 或 mock。")

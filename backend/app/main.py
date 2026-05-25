@@ -26,11 +26,18 @@ from app.models.lesson import Lesson, LessonMaterial
 from app.services.course_plan.import_service import create_lessons_from_confirmed_planned_lessons, import_course_plan
 from app.services.ai import provider as ai_provider
 from app.services.ai.deepseek_client import DeepSeekProviderError
+from app.services.ai.deepseek_client import (
+    get_allowed_deepseek_models,
+    get_default_deepseek_model,
+    is_allowed_deepseek_model,
+    normalize_model_name,
+)
 from app.services.ai.session_key_store import (
     SESSION_COOKIE_NAME,
     clear_session_api_key,
     delete_session_cookie,
     get_session_api_key,
+    get_session_selected_model,
     mask_api_key,
     resolve_session_id,
     set_session_cookie,
@@ -104,12 +111,17 @@ def _ai_settings_context(
     """构造 AI 设置页面上下文。"""
 
     api_key = get_session_api_key(session_id)
+    allowed_models = get_allowed_deepseek_models()
+    selected_model = get_session_selected_model(session_id) or get_default_deepseek_model()
     return {
         "is_api_key_set": bool(api_key),
         "masked_api_key": mask_api_key(api_key),
         "message": message,
         "ai_provider": ai_provider.get_ai_provider_name(),
         "next_path": sanitize_next_path(next_path),
+        "allowed_models": allowed_models,
+        "selected_model": selected_model,
+        "default_model": get_default_deepseek_model(),
     }
 
 
@@ -255,12 +267,24 @@ async def save_ai_settings(
     require_same_origin(request)
     form = await request.form()
     api_key = str(form.get("api_key", ""))
+    selected_model = normalize_model_name(str(form.get("selected_model", ""))) or get_default_deepseek_model()
     next_path = sanitize_next_path(str(form.get("next", "")))
     session_id, created = resolve_session_id(request)
     cleaned_key = api_key.strip()
+    if not is_allowed_deepseek_model(selected_model):
+        response = templates.TemplateResponse(
+            request,
+            "ai_settings.html",
+            _ai_settings_context(session_id, "模型配置无效，请选择当前允许列表中的 DeepSeek V4 模型。", next_path=next_path),
+            status_code=400,
+        )
+        if created:
+            set_session_cookie(response, session_id)
+        return response
+
     if cleaned_key:
         # API Key 只进入内存会话映射，不写数据库、不写日志、不回显。
-        set_session_api_key(session_id, cleaned_key)
+        set_session_api_key(session_id, cleaned_key, selected_model)
 
     if cleaned_key and next_path:
         response = RedirectResponse(url=next_path, status_code=303)
@@ -650,6 +674,7 @@ async def generate_lesson_knowledge_outline(
     ).all()
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
     api_key = get_session_api_key(session_id)
+    selected_model = get_session_selected_model(session_id) or get_default_deepseek_model()
     provider_name = ai_provider.get_ai_provider_name()
     if provider_name == "deepseek" and not api_key:
         return templates.TemplateResponse(
@@ -676,6 +701,7 @@ async def generate_lesson_knowledge_outline(
             lesson_for_ai,
             materials_for_ai,
             api_key,
+            selected_model,
         )
     except DeepSeekProviderError as exc:
         return templates.TemplateResponse(

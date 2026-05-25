@@ -84,6 +84,9 @@ V0.2 当前使用“会话级临时 API Key”：
 - 当前会话没有 API Key 时，阻止真实生成并提示教师先设置 Key；
 - 有 API Key 时调用 DeepSeek Provider；
 - `generated_by_model` 记录实际模型名，例如 `deepseek-v4-pro` 或 `deepseek-v4-flash`；
+- 教师可在 AI 设置页选择当前会话知识主干生成模型；
+- 模型选择只保存在服务端内存会话中，不写数据库、不写 cookie、不写日志；
+- 清除 API Key 时会同时清除当前会话模型选择；
 - `ai_raw_output` 只保存模型返回正文；
 - `edited_content` 初始等于模型正文；
 - 教师保存后状态变为 `reviewed`。
@@ -97,7 +100,8 @@ V0.2 当前使用“会话级临时 API Key”：
 ```env
 AI_PROVIDER=deepseek
 DEEPSEEK_BASE_URL="https://api.deepseek.com"
-DEEPSEEK_MODEL="deepseek-v4-pro"
+DEEPSEEK_ALLOWED_MODELS=deepseek-v4-flash,deepseek-v4-pro
+DEEPSEEK_DEFAULT_MODEL=deepseek-v4-flash
 AI_REQUEST_TIMEOUT_SECONDS=60
 AI_SESSION_COOKIE_SECURE=false
 AI_SESSION_KEY_IDLE_TIMEOUT_SECONDS=14400
@@ -105,13 +109,13 @@ AI_SESSION_KEY_MAX_ENTRIES=200
 AI_PROMPT_MATERIAL_MAX_CHARS=12000
 ```
 
-可按需要切换为：
+`DEEPSEEK_ALLOWED_MODELS` 是允许教师在 `/ai/settings` 页面选择的模型列表，逗号分隔。`DEEPSEEK_DEFAULT_MODEL` 是默认模型，必须属于允许列表，否则回退到安全默认模型。
 
-```env
-DEEPSEEK_MODEL="deepseek-v4-flash"
-```
+V0.2 当前只允许 `deepseek-v4-flash` 和 `deepseek-v4-pro`。不使用即将废弃的 `deepseek-chat` 或 `deepseek-reasoner`，未知模型不会进入页面选项。如 DeepSeek 官方模型名称变化，应由管理员更新环境变量并重启服务。
 
-不使用即将废弃的 `deepseek-chat` 或 `deepseek-reasoner`。
+`/ai/settings` 页面只显示模型配置说明、建议配置路径和 DeepSeek 官方文档链接，不读取、不打开、不下载、不展示真实 `.env` 文件内容。本地开发通常在项目根目录 `.env` 中配置，示例变量见 `.env.example`；生产部署时建议使用服务器环境变量。
+
+知识主干生成使用固定 Prompt 模板。AI 输出是教师审阅用草稿，不是自动定稿内容。模板包含课程思政与职业素养融入点、可测知识点与题型蓝图、补充内容建议和 AI 草稿声明。课程思政内容必须有依据，严禁编造政策文件、政策原文、标准编号、真实企业案例或真实数据来源。题型蓝图只作为后续小测设计参考，不生成正式测评；补充内容建议仅为参考方向，必须由教师人工筛选、修改和确认。
 
 ## Non Goals / 不做内容
 
