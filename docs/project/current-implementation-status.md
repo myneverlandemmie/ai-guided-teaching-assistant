@@ -24,10 +24,15 @@
 14. 支持删除课次材料；
 15. 支持默认材料标题；
 16. 页面不显示服务器绝对路径；
-17. Mock AI 知识主干生成；
+17. Mock AI 知识主干生成仅限测试 / 显式开发模式；
 18. 知识主干可编辑和保存；
 19. 知识主干生成前对学校、教师、班级等行政信息做基础过滤；
-20. 当前相关自动化测试最后一次运行结果为 `50 passed`。
+20. 会话级 DeepSeek API Key 设置、掩码显示和清除；
+21. DeepSeek Provider 抽象；
+22. 真实 DeepSeek 知识主干生成；
+23. 没有 API Key 时阻止真实生成并提示先设置 Key；
+24. 第 8.1 轮真实 AI 接入后的安全、稳定性与边界加固；
+25. 当前自动化测试最后一次运行结果为 `68 passed`。
 
 ## Current Development Context / 当前开发上下文
 
@@ -49,7 +54,7 @@
 
 - 完整注册 / 登录；
 - 测试教师账号、测试学生账号、测试班级；
-- 真实 AI API 接入；
+- 真实 AI API 在导学案、小测题、总结和批阅链路中的接入；
 - 真实导学案生成；
 - 小测题生成；
 - SQL 作业提交；
@@ -64,11 +69,37 @@
 - 完整教务系统；
 - 外部教师真实班级在项目方服务器上的大规模试用。
 
-## Mock AI Boundary / Mock AI 边界
+## AI Boundary / AI 边界
 
-当前知识主干由 Mock AI 规则生成，不调用真实 API。它可以用于演示“教师上传材料、系统生成初稿、教师编辑保存”的工作流，但不可作为最终案例中的真实 AI 生成成果。
+当前真实 AI 只接入“知识主干生成”。正式页面路径默认使用 DeepSeek Provider；如果当前会话没有 API Key，系统会提示教师先到 `/ai/settings` 设置 Key，不会静默 fallback 到 Mock。
 
-后续真实导学案、小测题、学习总结等应接入真实 API，并继续坚持“AI 输出必须由教师编辑确认后使用”。
+Mock AI 仅用于自动化测试或显式设置 `AI_PROVIDER=mock` 的本地开发环境，不应保存为案例正式生成成果。
+
+小测题生成、导学案生成、SQL 批阅、Python 批阅尚未接入真实 AI。后续真实导学案、小测题、学习总结等应接入真实 API，并继续坚持“AI 输出必须由教师编辑确认后使用”。
+
+## V0.2 Round 8.1 Hardening / 第 8.1 轮安全加固
+
+第 8.1 轮已完成真实 AI 接入后的安全、稳定性与边界加固：
+
+- 共享脱敏逻辑扩展；
+- Mock 与 DeepSeek 复用共享 sanitizer；
+- DeepSeek prompt 构造前脱敏；
+- DeepSeek HTTP 异常链脱敏，不保留可能携带 Authorization 的 httpx request；
+- 知识主干生成路由使用 `run_in_threadpool`；
+- 关键 POST 路由增加 same-origin 防护；
+- `POST /ai/settings` 先校验 `Origin` / `Referer`，再读取 form；
+- API Key 自动过期；
+- API Key 容量上限；
+- `session_key_store` 线程锁；
+- `session_id` cookie 格式校验；
+- 清除 API Key 时删除临时 session cookie；
+- DeepSeek 模型 allowlist；
+- 非法 `AI_PROVIDER` / timeout / model 安全处理；
+- 轻量 prompt 材料选择；
+- API Key 不入库测试增强；
+- fake provider 测试不捕获完整 API Key。
+
+当前 API Key 方案是 V0.2 本地开发 / 部门内试用级方案，不是生产级凭据管理系统。多 worker / 多实例部署时，单进程内存 Key 不共享。生产化如需多实例部署，应改用 Redis 等服务端临时存储，并配合加密、过期、轮换和审计机制。
 
 ## Material Parsing Boundary / 材料解析边界
 
@@ -104,6 +135,6 @@
 1. 测试教师账号；
 2. 测试学生账号；
 3. 演示班级 / 测试班级；
-4. 会话级临时 API Key 输入、清除和失效机制。
+4. 围绕真实知识主干生成继续补齐导学案、小测题和 SQL 作业演示闭环。
 
-理由：当前课程计划、课次材料、Mock 知识主干已经形成教师端演示骨架，下一步应补齐可试用的账号与班级上下文，再接真实 AI API。
+理由：当前课程计划、课次材料、知识主干已经形成教师端演示骨架，下一步应补齐可试用的账号与班级上下文，再扩展真实 AI 到导学案和小测题。

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}AI 设置{% endblock %}
+{% block content %}
+<h1>AI 设置</h1>
+<section class="card">
+  <h2>当前会话 DeepSeek API Key</h2>
+  <p>当前 Provider：{{ ai_provider }}</p>
+  {% if is_api_key_set %}
+    <p>状态：已设置，{{ masked_api_key }}</p>
+  {% else %}
+    <p>状态：未设置</p>
+  {% endif %}
+  {% if message %}
+    <p class="status">{{ message }}</p>
+  {% endif %}
+  <p>API Key 仅保存在当前浏览器会话对应的服务端内存中，不写入数据库，不会回显完整 Key。关闭会话、主动清除或服务重启后会失效。</p>
+  <p>本系统不提供公共 Token，不做 Token 转售。公网部署时建议启用 HTTPS。</p>
+</section>
+
+<section class="card">
+  <h2>设置当前会话 Key</h2>
+  <form method="post" action="/ai/settings">
+    <label for="api_key">DeepSeek API Key</label><br>
+    <input id="api_key" name="api_key" type="password" autocomplete="off" style="width:100%; max-width: 36rem;" required>
+    <p><button type="submit">保存到当前会话</button></p>
+  </form>
+  <form method="post" action="/ai/settings/clear">
+    <button type="submit">清除当前 Key</button>
+  </form>
+</section>
+{% endblock %}

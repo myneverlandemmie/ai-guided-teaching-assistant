@@ -5,7 +5,7 @@ import httpx
 import pytest
 from docx import Document
 from pptx import Presentation
-from sqlalchemy import create_engine, select
+from sqlalchemy import String, Text, create_engine, inspect as sa_inspect, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app import main
@@ -14,10 +14,30 @@ from app.models.course import Course
 from app.models.course_plan import CoursePlanUpload, PlannedLesson
 from app.models.knowledge_outline import KnowledgeOutline
 from app.models.lesson import Lesson, LessonMaterial
+from app.services.ai import session_key_store
+from app.services.ai.deepseek_client import (
+    DeepSeekConfig,
+    DeepSeekProviderError,
+    build_knowledge_outline_prompt,
+    generate_deepseek_knowledge_outline,
+    get_deepseek_config,
+)
+from app.services.ai.provider import GeneratedOutline
+from app.services.ai.sanitizer import sanitize_text_for_outline
+from app.services.ai.session_key_store import (
+    SESSION_COOKIE_NAME,
+    clear_all_session_api_keys_for_tests,
+    clear_session_api_key,
+    get_session_api_key,
+    get_session_store_size_for_tests,
+    has_session_api_key_for_tests,
+    set_session_api_key,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SAMPLE_PLAN = PROJECT_ROOT / "data" / "sample-course-plans" / "2025-2026-database-course-plan.xlsx"
+SAME_ORIGIN_HEADERS = {"origin": "http://testserver"}
 
 
 @pytest.fixture
@@ -25,7 +45,18 @@ def anyio_backend() -> str:
     return "asyncio"
 
 
+@pytest.fixture(autouse=True)
+def inline_threadpool_for_tests(monkeypatch: pytest.MonkeyPatch) -> None:
+    """测试环境不启动真实线程，避免误触外部请求或沙箱线程限制。"""
+
+    async def run_inline(func: object, *args: object, **kwargs: object) -> object:
+        return func(*args, **kwargs)  # type: ignore[misc]
+
+    monkeypatch.setattr(main, "run_in_threadpool", run_inline)
+
+
 def _build_test_client(tmp_path: Path) -> tuple[httpx.AsyncClient, sessionmaker[Session]]:
+    clear_all_session_api_keys_for_tests()
     database_path = tmp_path / "test-course-plan-pages.sqlite"
     engine = create_engine(
         f"sqlite+pysqlite:///{database_path}",
@@ -56,6 +87,93 @@ def _create_course(session_factory: sessionmaker[Session]) -> Course:
         session.commit()
         session.refresh(course)
         return course
+
+
+def _database_contains_text(session: Session, needle: str) -> bool:
+    """扫描业务表文本字段是否包含指定内容，不返回字段值。"""
+
+    bind = session.get_bind()
+    inspector = sa_inspect(bind)
+    for table_name in inspector.get_table_names():
+        if table_name.startswith("sqlite_"):
+            continue
+        columns = [
+            column["name"]
+            for column in inspector.get_columns(table_name)
+            if isinstance(column["type"], (String, Text))
+        ]
+        if not columns:
+            continue
+        quoted_columns = ", ".join(f'"{column}"' for column in columns)
+        rows = session.execute(text(f'SELECT {quoted_columns} FROM "{table_name}"')).all()
+        for row in rows:
+            if any(value is not None and needle in str(value) for value in row):
+                return True
+    return False
+
+
+def test_session_api_key_store_expires_and_clears(monkeypatch: pytest.MonkeyPatch) -> None:
+    clear_all_session_api_keys_for_tests()
+    monkeypatch.setenv("AI_SESSION_KEY_IDLE_TIMEOUT_SECONDS", "10")
+    current_time = [100.0]
+    monkeypatch.setattr(session_key_store, "_now", lambda: current_time[0])
+    session_id = "A" * 40
+
+    set_session_api_key(session_id, "sk-" + "x" * 16 + "1111")
+
+    assert get_session_api_key(session_id) is not None
+    current_time[0] = 111.0
+    assert get_session_api_key(session_id) is None
+    assert has_session_api_key_for_tests(session_id) is False
+
+    set_session_api_key(session_id, "sk-" + "x" * 16 + "2222")
+    clear_session_api_key(session_id)
+    assert get_session_api_key(session_id) is None
+
+
+def test_session_api_key_store_capacity_and_invalid_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    clear_all_session_api_keys_for_tests()
+    monkeypatch.setenv("AI_SESSION_KEY_IDLE_TIMEOUT_SECONDS", "bad")
+    monkeypatch.setenv("AI_SESSION_KEY_MAX_ENTRIES", "2")
+    current_time = [200.0]
+    monkeypatch.setattr(session_key_store, "_now", lambda: current_time[0])
+
+    for index, session_id in enumerate(["B" * 40, "C" * 40, "D" * 40]):
+        current_time[0] += index + 1
+        set_session_api_key(session_id, "sk-" + "y" * 16 + str(index).zfill(4))
+
+    assert get_session_store_size_for_tests() == 2
+    assert get_session_api_key("B" * 40) is None
+    assert get_session_api_key("C" * 40) is not None
+    assert get_session_api_key("D" * 40) is not None
+
+    monkeypatch.setenv("AI_SESSION_KEY_MAX_ENTRIES", "bad")
+    set_session_api_key("E" * 40, "sk-" + "z" * 16 + "9999")
+    assert get_session_api_key("E" * 40) is not None
+
+
+def test_sanitizer_covers_common_administrative_variants() -> None:
+    source = "\n".join(
+        [
+            "学校名称：示例学校",
+            "教师：张老师",
+            "任课老师：张老师",
+            "班级：23物联网2班",
+            "学校 | 示例学校",
+            "授课班级 23物联网2班",
+            "教学目标：掌握 WHERE 条件查询。",
+            "实验步骤：编写 SQL 语句。",
+        ]
+    )
+
+    sanitized = sanitize_text_for_outline(source)
+
+    assert "示例学校" not in sanitized
+    assert "张老师" not in sanitized
+    assert "23物联网2班" not in sanitized
+    assert "教学目标" in sanitized
+    assert "WHERE" in sanitized
+    assert "实验步骤" in sanitized
 
 
 @pytest.mark.anyio
@@ -850,7 +968,102 @@ async def test_lesson_detail_shows_knowledge_outline_entry(tmp_path: Path) -> No
 
 
 @pytest.mark.anyio
-async def test_can_generate_mock_knowledge_outline_without_materials(tmp_path: Path) -> None:
+async def test_ai_settings_can_set_mask_and_clear_session_key(tmp_path: Path) -> None:
+    client, _ = _build_test_client(tmp_path)
+    try:
+        page_response = await client.get("/ai/settings")
+        assert page_response.status_code == 200
+        assert "状态：未设置" in page_response.text
+        assert "API Key 仅保存在当前浏览器会话" in page_response.text
+
+        save_response = await client.post(
+            "/ai/settings",
+            data={"api_key": "sk-test-secret-abcd"},
+            headers=SAME_ORIGIN_HEADERS,
+        )
+        assert save_response.status_code == 200
+        assert "状态：已设置" in save_response.text
+        assert "sk-****abcd" in save_response.text
+        assert "sk-test-secret-abcd" not in save_response.text
+        old_session_id = client.cookies.get(SESSION_COOKIE_NAME)
+        assert old_session_id is not None
+        assert has_session_api_key_for_tests(old_session_id) is True
+
+        clear_redirect = await client.post("/ai/settings/clear", headers=SAME_ORIGIN_HEADERS, follow_redirects=False)
+        assert clear_redirect.status_code == 303
+        assert "Max-Age=0" in clear_redirect.headers.get("set-cookie", "")
+        assert has_session_api_key_for_tests(old_session_id) is False
+
+        clear_response = await client.get("/ai/settings")
+        assert clear_response.status_code == 200
+        assert "状态：未设置" in clear_response.text
+        assert client.cookies.get(SESSION_COOKIE_NAME) != old_session_id
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_invalid_session_cookie_is_replaced_without_echo(tmp_path: Path) -> None:
+    client, _ = _build_test_client(tmp_path)
+    invalid_session = "bad/session"
+    try:
+        response = await client.get("/ai/settings", headers={"cookie": f"{SESSION_COOKIE_NAME}={invalid_session}"})
+
+        assert response.status_code == 200
+        assert invalid_session not in response.text
+        new_session_id = response.cookies.get(SESSION_COOKIE_NAME)
+        assert new_session_id is not None
+        assert new_session_id != invalid_session
+        assert has_session_api_key_for_tests(invalid_session) is False
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_api_key_is_not_written_to_database(tmp_path: Path) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    fake_key = "sk-" + "d" * 16 + "3333"
+    try:
+        response = await client.post("/ai/settings", data={"api_key": fake_key}, headers=SAME_ORIGIN_HEADERS)
+
+        assert response.status_code == 200
+        assert fake_key not in response.text
+        with session_factory() as session:
+            key_tables = session.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' AND lower(name) LIKE '%key%'")
+            ).all()
+            assert key_tables == []
+            assert session.scalar(select(KnowledgeOutline)) is None
+            assert _database_contains_text(session, fake_key) is False
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_ai_settings_rejects_cross_origin_without_setting_key(tmp_path: Path) -> None:
+    client, _ = _build_test_client(tmp_path)
+    fake_key = "sk-" + "o" * 16 + "4444"
+    try:
+        response = await client.post(
+            "/ai/settings",
+            data={"api_key": fake_key},
+            headers={"origin": "http://evil.example"},
+        )
+
+        assert response.status_code == 403
+        assert fake_key not in response.text
+        assert get_session_store_size_for_tests() == 0
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_deepseek_generation_without_api_key_prompts_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AI_PROVIDER", "deepseek")
     client, session_factory = _build_test_client(tmp_path)
     course = _create_course(session_factory)
     try:
@@ -864,7 +1077,399 @@ async def test_can_generate_mock_knowledge_outline_without_materials(tmp_path: P
             follow_redirects=False,
         )
 
-        response = await client.post("/lessons/1/knowledge-outline/generate", follow_redirects=False)
+        response = await client.post(
+            "/lessons/1/knowledge-outline/generate",
+            headers=SAME_ORIGIN_HEADERS,
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 400
+        assert "请先设置当前会话 DeepSeek API Key" in response.text
+        assert "/ai/settings" in response.text
+        with session_factory() as session:
+            assert session.scalar(select(KnowledgeOutline)) is None
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_knowledge_outline_generation_rejects_cross_origin_without_creating_outline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AI_PROVIDER", "deepseek")
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _upload_sample_plan(client, course)
+        with session_factory() as session:
+            selected_id = session.scalar(select(PlannedLesson.id).order_by(PlannedLesson.id))
+            assert selected_id is not None
+        await client.post(
+            "/course-plan-uploads/1/confirm",
+            data={"planned_lesson_ids": str(selected_id)},
+            follow_redirects=False,
+        )
+
+        response = await client.post(
+            "/lessons/1/knowledge-outline/generate",
+            headers={"origin": "http://evil.example"},
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 403
+        with session_factory() as session:
+            assert session.scalar(select(KnowledgeOutline)) is None
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_deepseek_generation_uses_provider_and_saves_outline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AI_PROVIDER", "deepseek")
+    captured: dict[str, object] = {}
+
+    def fake_generate(lesson: Lesson, materials: list[LessonMaterial], api_key: str | None) -> GeneratedOutline:
+        captured["lesson_title"] = lesson.title
+        captured["material_text"] = "\n".join(material.content for material in materials)
+        captured["has_api_key"] = bool(api_key)
+        captured["api_key_tail"] = api_key[-4:] if api_key else ""
+        return GeneratedOutline("真实 Provider 测试返回：WHERE 与 IN关键字 知识主干。", "deepseek-v4-flash")
+
+    monkeypatch.setattr(main.ai_provider, "generate_knowledge_outline_with_provider", fake_generate)
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _upload_sample_plan(client, course)
+        with session_factory() as session:
+            selected_id = session.scalar(select(PlannedLesson.id).order_by(PlannedLesson.id))
+            assert selected_id is not None
+        await client.post(
+            "/course-plan-uploads/1/confirm",
+            data={"planned_lesson_ids": str(selected_id)},
+            follow_redirects=False,
+        )
+        await client.post(
+            "/lessons/1/materials",
+            data={
+                "title": "课堂材料",
+                "material_type": "pasted_text",
+                "content": "教学目标：掌握 WHERE 条件查询和 IN关键字。",
+            },
+            follow_redirects=False,
+        )
+        await client.post("/ai/settings", data={"api_key": "sk-provider-test-abcd"}, headers=SAME_ORIGIN_HEADERS)
+
+        response = await client.post(
+            "/lessons/1/knowledge-outline/generate",
+            headers=SAME_ORIGIN_HEADERS,
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 303
+        assert response.headers["location"] == "/lessons/1/knowledge-outline"
+        assert captured["has_api_key"] is True
+        assert captured["api_key_tail"] == "abcd"
+        assert "WHERE" in str(captured["material_text"])
+        with session_factory() as session:
+            outline = session.scalar(select(KnowledgeOutline))
+            assert outline is not None
+            assert outline.generated_by_model == "deepseek-v4-flash"
+            assert outline.status == "draft"
+            assert outline.ai_raw_output == "真实 Provider 测试返回：WHERE 与 IN关键字 知识主干。"
+            assert outline.edited_content == outline.ai_raw_output
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_deepseek_generation_error_does_not_save_outline_or_expose_key(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AI_PROVIDER", "deepseek")
+    fake_key = "sk-" + "e" * 16 + "6666"
+
+    def fake_generate(lesson: Lesson, materials: list[LessonMaterial], api_key: str | None) -> GeneratedOutline:
+        raise DeepSeekProviderError("DeepSeek 请求超时，请稍后重试或减少材料长度。")
+
+    monkeypatch.setattr(main.ai_provider, "generate_knowledge_outline_with_provider", fake_generate)
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _upload_sample_plan(client, course)
+        with session_factory() as session:
+            selected_id = session.scalar(select(PlannedLesson.id).order_by(PlannedLesson.id))
+            assert selected_id is not None
+        await client.post(
+            "/course-plan-uploads/1/confirm",
+            data={"planned_lesson_ids": str(selected_id)},
+            follow_redirects=False,
+        )
+        await client.post("/ai/settings", data={"api_key": fake_key}, headers=SAME_ORIGIN_HEADERS)
+
+        response = await client.post(
+            "/lessons/1/knowledge-outline/generate",
+            headers=SAME_ORIGIN_HEADERS,
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 400
+        assert "请求超时" in response.text
+        assert fake_key not in response.text
+        with session_factory() as session:
+            assert session.scalar(select(KnowledgeOutline)) is None
+            assert _database_contains_text(session, fake_key) is False
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_invalid_ai_provider_shows_safe_error_without_outline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AI_PROVIDER", "bad")
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _upload_sample_plan(client, course)
+        with session_factory() as session:
+            selected_id = session.scalar(select(PlannedLesson.id).order_by(PlannedLesson.id))
+            assert selected_id is not None
+        await client.post(
+            "/course-plan-uploads/1/confirm",
+            data={"planned_lesson_ids": str(selected_id)},
+            follow_redirects=False,
+        )
+
+        response = await client.post(
+            "/lessons/1/knowledge-outline/generate",
+            headers=SAME_ORIGIN_HEADERS,
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 400
+        assert "AI Provider 配置无效" in response.text
+        with session_factory() as session:
+            assert session.scalar(select(KnowledgeOutline)) is None
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_invalid_deepseek_model_shows_safe_error_without_outline(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AI_PROVIDER", "deepseek")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-chat")
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _upload_sample_plan(client, course)
+        with session_factory() as session:
+            selected_id = session.scalar(select(PlannedLesson.id).order_by(PlannedLesson.id))
+            assert selected_id is not None
+        await client.post(
+            "/course-plan-uploads/1/confirm",
+            data={"planned_lesson_ids": str(selected_id)},
+            follow_redirects=False,
+        )
+        await client.post("/ai/settings", data={"api_key": "sk-" + "m" * 16 + "7777"}, headers=SAME_ORIGIN_HEADERS)
+
+        response = await client.post(
+            "/lessons/1/knowledge-outline/generate",
+            headers=SAME_ORIGIN_HEADERS,
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 400
+        assert "模型配置无效" in response.text
+        with session_factory() as session:
+            assert session.scalar(select(KnowledgeOutline)) is None
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+def test_deepseek_prompt_filters_sensitive_material_information() -> None:
+    lesson = Lesson(
+        course_id=1,
+        planned_lesson_id=None,
+        week="1",
+        lesson_no="1",
+        hours="2",
+        lesson_code="0402",
+        title="WHERE 条件查询",
+        content_summary="班级：23物联网2班\n讲解 WHERE 与 IN关键字。",
+        status="draft",
+    )
+    material = LessonMaterial(
+        lesson_id=1,
+        material_type="pasted_text",
+        title="虚构材料",
+        content="\n".join(
+            [
+                "学校：示例学校",
+                "学校名称：示例学校",
+                "学校 | 示例学校",
+                "教师：张老师",
+                "任课教师：张老师",
+                "任课老师：张老师",
+                "班级：23物联网2班",
+                "授课班级：23物联网2班",
+                "授课班级 23物联网2班",
+                "教学目标：掌握 WHERE 条件查询。",
+                "重点：WHERE、IN关键字 的使用。",
+                "难点：多个条件组合。",
+            ]
+        ),
+    )
+
+    prompt = build_knowledge_outline_prompt(lesson, [material])
+
+    assert "示例学校" not in prompt
+    assert "张老师" not in prompt
+    assert "23物联网2班" not in prompt
+    assert "教学目标" in prompt
+    assert "WHERE" in prompt
+    assert "IN关键字" in prompt
+    assert "重点" in prompt
+    assert "难点" in prompt
+
+
+def test_deepseek_prompt_prioritizes_key_material_and_limits_length(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AI_PROMPT_MATERIAL_MAX_CHARS", "900")
+    lesson = Lesson(
+        course_id=1,
+        planned_lesson_id=None,
+        week="1",
+        lesson_no="1",
+        hours="2",
+        lesson_code="0402",
+        title="WHERE 条件查询",
+        content_summary="条件查询。",
+        status="draft",
+    )
+    material = LessonMaterial(
+        lesson_id=1,
+        material_type="pasted_text",
+        title="长材料",
+        content="\n".join(
+            [
+                *(f"普通铺垫内容 {index}" for index in range(80)),
+                "学校名称：示例学校",
+                "教学目标：掌握 WHERE 子句。",
+                "实验步骤：编写 SQL 条件查询。",
+            ]
+        ),
+    )
+
+    prompt = build_knowledge_outline_prompt(lesson, [material])
+
+    assert len(prompt) <= 900
+    assert "教学目标" in prompt
+    assert "实验步骤" in prompt
+    assert "SQL" in prompt
+    assert "示例学校" not in prompt
+
+
+def test_deepseek_config_rejects_deprecated_or_unknown_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    for model_name in ["deepseek-chat", "deepseek-reasoner", "unknown-model"]:
+        monkeypatch.setenv("DEEPSEEK_MODEL", model_name)
+        with pytest.raises(DeepSeekProviderError):
+            get_deepseek_config()
+
+
+def test_deepseek_config_accepts_v4_models_and_invalid_timeout_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AI_REQUEST_TIMEOUT_SECONDS", "bad")
+    for model_name in ["deepseek-v4-pro", "deepseek-v4-flash"]:
+        monkeypatch.setenv("DEEPSEEK_MODEL", model_name)
+        config = get_deepseek_config()
+        assert config.model == model_name
+        assert config.timeout_seconds == 60.0
+
+    monkeypatch.setenv("AI_PROMPT_MATERIAL_MAX_CHARS", "bad")
+    config = get_deepseek_config()
+    assert config.prompt_material_max_chars == 12000
+
+
+def test_deepseek_http_errors_do_not_keep_exception_chain_or_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_key = "sk-" + "h" * 16 + "5555"
+    lesson = Lesson(
+        course_id=1,
+        planned_lesson_id=None,
+        week="1",
+        lesson_no="1",
+        hours="2",
+        lesson_code="0402",
+        title="WHERE 条件查询",
+        content_summary="条件查询。",
+        status="draft",
+    )
+
+    class TimeoutClient:
+        def __init__(self, timeout: float) -> None:
+            self.timeout = timeout
+
+        def __enter__(self) -> "TimeoutClient":
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
+            return None
+
+        def post(self, *args: object, **kwargs: object) -> httpx.Response:
+            request = httpx.Request("POST", "https://api.example.test", headers={"Authorization": f"Bearer {fake_key}"})
+            raise httpx.TimeoutException("timeout", request=request)
+
+    monkeypatch.setattr("app.services.ai.deepseek_client.httpx.Client", TimeoutClient)
+    with pytest.raises(DeepSeekProviderError) as timeout_error:
+        generate_deepseek_knowledge_outline(lesson, [], fake_key)
+    assert timeout_error.value.__cause__ is None
+    assert fake_key not in str(timeout_error.value)
+
+    class HttpErrorClient(TimeoutClient):
+        def post(self, *args: object, **kwargs: object) -> httpx.Response:
+            request = httpx.Request("POST", "https://api.example.test", headers={"Authorization": f"Bearer {fake_key}"})
+            raise httpx.RequestError("network", request=request)
+
+    monkeypatch.setattr("app.services.ai.deepseek_client.httpx.Client", HttpErrorClient)
+    with pytest.raises(DeepSeekProviderError) as http_error:
+        generate_deepseek_knowledge_outline(lesson, [], fake_key)
+    assert http_error.value.__cause__ is None
+    assert fake_key not in str(http_error.value)
+
+
+@pytest.mark.anyio
+async def test_can_generate_mock_knowledge_outline_without_materials(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AI_PROVIDER", "mock")
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _upload_sample_plan(client, course)
+        with session_factory() as session:
+            selected_id = session.scalar(select(PlannedLesson.id).order_by(PlannedLesson.id))
+            assert selected_id is not None
+        await client.post(
+            "/course-plan-uploads/1/confirm",
+            data={"planned_lesson_ids": str(selected_id)},
+            follow_redirects=False,
+        )
+
+        response = await client.post(
+            "/lessons/1/knowledge-outline/generate",
+            headers=SAME_ORIGIN_HEADERS,
+            follow_redirects=False,
+        )
 
         assert response.status_code == 303
         assert response.headers["location"] == "/lessons/1/knowledge-outline"
@@ -885,7 +1490,8 @@ async def test_can_generate_mock_knowledge_outline_without_materials(tmp_path: P
 
 
 @pytest.mark.anyio
-async def test_mock_knowledge_outline_uses_lesson_material_keywords(tmp_path: Path) -> None:
+async def test_mock_knowledge_outline_uses_lesson_material_keywords(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AI_PROVIDER", "mock")
     client, session_factory = _build_test_client(tmp_path)
     course = _create_course(session_factory)
     try:
@@ -908,7 +1514,11 @@ async def test_mock_knowledge_outline_uses_lesson_material_keywords(tmp_path: Pa
             follow_redirects=False,
         )
 
-        response = await client.post("/lessons/1/knowledge-outline/generate", follow_redirects=False)
+        response = await client.post(
+            "/lessons/1/knowledge-outline/generate",
+            headers=SAME_ORIGIN_HEADERS,
+            follow_redirects=False,
+        )
 
         assert response.status_code == 303
         with session_factory() as session:
@@ -924,7 +1534,11 @@ async def test_mock_knowledge_outline_uses_lesson_material_keywords(tmp_path: Pa
 
 
 @pytest.mark.anyio
-async def test_mock_knowledge_outline_filters_sensitive_material_information(tmp_path: Path) -> None:
+async def test_mock_knowledge_outline_filters_sensitive_material_information(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AI_PROVIDER", "mock")
     client, session_factory = _build_test_client(tmp_path)
     course = _create_course(session_factory)
     sensitive_material = "\n".join(
@@ -958,7 +1572,11 @@ async def test_mock_knowledge_outline_filters_sensitive_material_information(tmp
             follow_redirects=False,
         )
 
-        response = await client.post("/lessons/1/knowledge-outline/generate", follow_redirects=False)
+        response = await client.post(
+            "/lessons/1/knowledge-outline/generate",
+            headers=SAME_ORIGIN_HEADERS,
+            follow_redirects=False,
+        )
 
         assert response.status_code == 303
         with session_factory() as session:
@@ -983,7 +1601,11 @@ async def test_mock_knowledge_outline_filters_sensitive_material_information(tmp
 
 
 @pytest.mark.anyio
-async def test_knowledge_outline_page_and_save_reviewed_content(tmp_path: Path) -> None:
+async def test_knowledge_outline_page_and_save_reviewed_content(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AI_PROVIDER", "mock")
     client, session_factory = _build_test_client(tmp_path)
     course = _create_course(session_factory)
     try:
@@ -996,7 +1618,11 @@ async def test_knowledge_outline_page_and_save_reviewed_content(tmp_path: Path) 
             data={"planned_lesson_ids": str(selected_id)},
             follow_redirects=False,
         )
-        await client.post("/lessons/1/knowledge-outline/generate", follow_redirects=False)
+        await client.post(
+            "/lessons/1/knowledge-outline/generate",
+            headers=SAME_ORIGIN_HEADERS,
+            follow_redirects=False,
+        )
 
         page_response = await client.get("/lessons/1/knowledge-outline")
 

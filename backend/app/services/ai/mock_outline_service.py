@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 
 from app.models.lesson import Lesson, LessonMaterial
+from app.services.ai.sanitizer import sanitize_lesson_for_outline, sanitize_materials_for_outline, sanitize_text_for_outline
 
 MOCK_OUTLINE_MODEL_NAME = "mock-ai-v0.2"
 KEYWORD_PATTERNS = (
@@ -29,13 +30,6 @@ KEYWORD_PATTERNS = (
     "while",
     "def",
 )
-SENSITIVE_FIELD_PATTERN = re.compile(
-    r"^\s*(学校|教研组|任课教师|授课班级|授课地点|授课日期|学号|姓名|手机号|身份证号)\s*[:：]",
-    re.IGNORECASE,
-)
-PHONE_PATTERN = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
-ID_CARD_PATTERN = re.compile(r"(?<!\d)\d{17}[\dXx](?!\d)")
-
 
 def sanitize_material_text_for_outline(text: str) -> str:
     """过滤不应进入知识主干的行政信息和个人信息。
@@ -50,18 +44,7 @@ def sanitize_material_text_for_outline(text: str) -> str:
         不主动抛出业务异常。
     """
 
-    sanitized_lines: list[str] = []
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        # 行级字段常见于教案封面或表格左侧标签，生成知识主干时直接忽略。
-        if SENSITIVE_FIELD_PATTERN.match(line):
-            continue
-        line = PHONE_PATTERN.sub("[已过滤手机号]", line)
-        line = ID_CARD_PATTERN.sub("[已过滤身份证号]", line)
-        sanitized_lines.append(line)
-    return "\n".join(sanitized_lines)
+    return sanitize_text_for_outline(text)
 
 
 def extract_teaching_relevant_text(text: str) -> str:
@@ -113,7 +96,9 @@ def generate_mock_knowledge_outline(lesson: Lesson, materials: list[LessonMateri
         不主动抛出业务异常；调用方负责保存。
     """
 
-    sanitized_material_text = "\n".join(extract_teaching_relevant_text(material.content) for material in materials)
+    sanitized_lesson = sanitize_lesson_for_outline(lesson)
+    sanitized_materials = sanitize_materials_for_outline(materials)
+    sanitized_material_text = "\n".join(material.content for material in sanitized_materials)
     material_keywords = _collect_material_keywords(sanitized_material_text)
     material_excerpt = _compact_text(sanitized_material_text)
     keyword_text = "、".join(material_keywords) if material_keywords else "结合课次标题与教学内容梳理基础概念"
@@ -122,12 +107,12 @@ def generate_mock_knowledge_outline(lesson: Lesson, materials: list[LessonMateri
     # Mock 输出必须让教师可编辑，不能伪装成真实大模型最终结论。
     return "\n".join(
         [
-            f"# {lesson.lesson_code + '-' if lesson.lesson_code else ''}{lesson.title} 知识主干初稿",
+            f"# {sanitized_lesson.lesson_code + '-' if sanitized_lesson.lesson_code else ''}{sanitized_lesson.title} 知识主干初稿",
             "",
             "生成说明：本内容由 Mock AI 规则生成，仅用于演示流程，必须由教师编辑确认后使用。",
             "",
             "## 1. 本节课定位",
-            f"本节课围绕“{lesson.title}”展开，教学内容摘要为：{lesson.content_summary or '暂无摘要'}",
+            f"本节课围绕“{sanitized_lesson.title}”展开，教学内容摘要为：{sanitized_lesson.content_summary or '暂无摘要'}",
             "",
             "## 2. 学习目标",
             "- 理解本课核心概念和基本应用场景。",
