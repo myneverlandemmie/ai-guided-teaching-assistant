@@ -157,6 +157,9 @@ AI_PROMPT_MATERIAL_MAX_CHARS=12000
 
 - `DEEPSEEK_ALLOWED_MODELS`：允许教师在 AI 设置页选择的 DeepSeek 模型，逗号分隔；
 - `DEEPSEEK_DEFAULT_MODEL`：默认模型，必须属于允许模型列表，否则回退到安全默认值；
+- `deepseek-v4-pro`：更适合知识主干生成、课程思政与职业素养融入点、正式案例展示和争议样本复核；
+- `deepseek-v4-flash`：更适合日常快速预览、批量反馈初稿、调试 Prompt 和验证页面流程；
+- 知识主干正式演示建议优先使用 `deepseek-v4-pro`，批量反馈或调试建议优先使用 `deepseek-v4-flash`；
 - `AI_SESSION_COOKIE_SECURE=true`：公网 HTTPS 部署时启用，本地开发可保持 `false`；
 - `AI_SESSION_KEY_IDLE_TIMEOUT_SECONDS=14400`：当前会话 API Key 空闲 4 小时后自动失效；
 - `AI_SESSION_KEY_MAX_ENTRIES=200`：单进程内存最多保留 200 个会话 Key，超限会清理过期或最久未使用项；

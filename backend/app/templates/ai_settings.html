@@ -49,6 +49,7 @@
   <p>模型列表由服务端环境变量 <code>DEEPSEEK_ALLOWED_MODELS</code> 配置，默认模型由 <code>DEEPSEEK_DEFAULT_MODEL</code> 配置。</p>
   <p>本地开发时通常在项目根目录 <code>.env</code> 中配置，示例变量见 <code>.env.example</code>；生产部署时建议使用服务器环境变量。</p>
   <p>请不要在 <code>.env</code>、<code>.env.example</code>、日志或 Git 中提交真实 API Key。如 DeepSeek 官方模型名称变化，可由管理员更新环境变量后重启服务。</p>
+  <p>模型选用建议：<code>deepseek-v4-pro</code> 更适合知识主干生成、课程思政与职业素养融入点、正式案例展示和争议样本复核；<code>deepseek-v4-flash</code> 更适合日常快速预览、批量反馈初稿和调试页面流程。知识主干正式演示建议优先使用 <code>deepseek-v4-pro</code>，批量反馈或调试建议优先使用 <code>deepseek-v4-flash</code>。</p>
   <p>
     DeepSeek 官方文档：
     <a href="https://api-docs.deepseek.com/zh-cn/api/list-models" target="_blank" rel="noopener noreferrer">模型列表</a>
