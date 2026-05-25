@@ -1910,3 +1910,38 @@ async def test_knowledge_outline_page_and_save_reviewed_content(
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_knowledge_outline_page_shows_generation_hint_and_disable_script(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AI_PROVIDER", "mock")
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _upload_sample_plan(client, course)
+        with session_factory() as session:
+            selected_id = session.scalar(select(PlannedLesson.id).order_by(PlannedLesson.id))
+            assert selected_id is not None
+        await client.post(
+            "/course-plan-uploads/1/confirm",
+            data={"planned_lesson_ids": str(selected_id)},
+            follow_redirects=False,
+        )
+
+        page_response = await client.get("/lessons/1/knowledge-outline")
+
+        assert page_response.status_code == 200
+        assert "正在调用 AI 生成知识主干" in page_response.text
+        assert "deepseek-v4-pro" in page_response.text
+        assert "请勿重复点击或刷新页面" in page_response.text
+        assert "生成内容为 AI 草稿，需教师审核、修改与确认" in page_response.text
+        assert "outline-generation-form" in page_response.text
+        assert "outline-generation-button" in page_response.text
+        assert "outline-generation-hint" in page_response.text
+        assert "正在生成..." in page_response.text
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()

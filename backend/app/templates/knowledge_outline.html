@@ -31,9 +31,25 @@
 {% else %}
   <section class="card">
     <p>当前课次还没有知识主干。请先生成 AI 初稿。</p>
-    <form method="post" action="/lessons/{{ lesson.id }}/knowledge-outline/generate">
-      <button type="submit">生成知识主干</button>
+    <p id="outline-generation-hint" style="display:none; padding:.75rem 1rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; line-height:1.7;">
+      正在调用 AI 生成知识主干。`deepseek-v4-pro` 可能需要几十秒，请勿重复点击或刷新页面。生成内容为 AI 草稿，需教师审核、修改与确认。
+    </p>
+    <form id="outline-generation-form" method="post" action="/lessons/{{ lesson.id }}/knowledge-outline/generate">
+      <button id="outline-generation-button" type="submit">生成知识主干</button>
     </form>
   </section>
 {% endif %}
+<script>
+  const outlineGenerationForm = document.getElementById('outline-generation-form');
+  const outlineGenerationButton = document.getElementById('outline-generation-button');
+  const outlineGenerationHint = document.getElementById('outline-generation-hint');
+
+  if (outlineGenerationForm && outlineGenerationButton && outlineGenerationHint) {
+    outlineGenerationForm.addEventListener('submit', () => {
+      outlineGenerationHint.style.display = 'block';
+      outlineGenerationButton.disabled = true;
+      outlineGenerationButton.textContent = '正在生成...';
+    });
+  }
+</script>
 {% endblock %}
