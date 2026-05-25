@@ -67,7 +67,40 @@ DEFAULT_MATERIAL_TITLE_LABELS = {
 }
 
 
-def _ai_settings_context(session_id: str, message: str | None = None) -> dict[str, object]:
+def sanitize_next_path(next_path: str | None) -> str | None:
+    """清洗 AI 设置页返回路径，只允许站内相对路径。
+
+    Args:
+        next_path: 用户提供的返回路径。
+
+    Returns:
+        合法时返回原路径；非法或为空时返回 None。
+
+    Raises:
+        不主动抛出业务异常。
+    """
+
+    if not next_path:
+        return None
+
+    if not next_path.startswith("/") or next_path.startswith("//"):
+        return None
+    if "\\" in next_path:
+        return None
+    if any(ord(char) < 32 or ord(char) == 127 for char in next_path):
+        return None
+
+    parsed_next = urlparse(next_path)
+    if parsed_next.scheme or parsed_next.netloc:
+        return None
+    return next_path
+
+
+def _ai_settings_context(
+    session_id: str,
+    message: str | None = None,
+    next_path: str | None = None,
+) -> dict[str, object]:
     """构造 AI 设置页面上下文。"""
 
     api_key = get_session_api_key(session_id)
@@ -76,6 +109,7 @@ def _ai_settings_context(session_id: str, message: str | None = None) -> dict[st
         "masked_api_key": mask_api_key(api_key),
         "message": message,
         "ai_provider": ai_provider.get_ai_provider_name(),
+        "next_path": sanitize_next_path(next_path),
     }
 
 
@@ -201,10 +235,11 @@ async def show_ai_settings(request: Request) -> HTMLResponse:
     """显示当前会话 API Key 设置页面。"""
 
     session_id, created = resolve_session_id(request)
+    next_path = sanitize_next_path(request.query_params.get("next"))
     response = templates.TemplateResponse(
         request,
         "ai_settings.html",
-        _ai_settings_context(session_id),
+        _ai_settings_context(session_id, next_path=next_path),
     )
     if created:
         set_session_cookie(response, session_id)
@@ -220,18 +255,25 @@ async def save_ai_settings(
     require_same_origin(request)
     form = await request.form()
     api_key = str(form.get("api_key", ""))
+    next_path = sanitize_next_path(str(form.get("next", "")))
     session_id, created = resolve_session_id(request)
     cleaned_key = api_key.strip()
     if cleaned_key:
         # API Key 只进入内存会话映射，不写数据库、不写日志、不回显。
         set_session_api_key(session_id, cleaned_key)
 
+    if cleaned_key and next_path:
+        response = RedirectResponse(url=next_path, status_code=303)
+        if created:
+            set_session_cookie(response, session_id)
+        return response
+
     message = "当前会话 API Key 已设置。" if cleaned_key else "请输入有效的 DeepSeek API Key。"
     status_code = 200 if cleaned_key else 400
     response = templates.TemplateResponse(
         request,
         "ai_settings.html",
-        _ai_settings_context(session_id, message),
+        _ai_settings_context(session_id, message, next_path=next_path),
         status_code=status_code,
     )
     if created:

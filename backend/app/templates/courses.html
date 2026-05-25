@@ -7,7 +7,11 @@
   <section class="card">
     <h2>{{ course.title }}</h2>
     <p>学期：{{ course.semester }} ｜ 状态：<span class="status">{{ course.status }}</span></p>
-    <p><a href="/courses/{{ course.id }}/course-plan/upload">上传授课计划</a></p>
+    <p>
+      <a href="/courses/{{ course.id }}/course-plan/upload">上传授课计划</a>
+      ｜
+      <a href="/courses/{{ course.id }}/lessons">查看正式课次</a>
+    </p>
   </section>
 {% endfor %}
 {% endblock %}
