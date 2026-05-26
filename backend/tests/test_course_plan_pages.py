@@ -1,5 +1,6 @@
 from collections.abc import Generator
 from pathlib import Path
+import re
 
 import httpx
 import pytest
@@ -1691,7 +1692,29 @@ def test_knowledge_outline_prompt_contains_fixed_sections_and_disclaimers() -> N
     assert "提高目标" in prompt
     assert "拓展目标" in prompt
     assert "6S、机房卫生、课堂纪律" in prompt
-    assert "不默认作为中心思政" in prompt
+    assert "不默认作为中心融入点" in prompt
+    assert "技术准确性优先" in prompt
+    assert "课程、语言、数据库、开发板、平台、软件版本或工具链" in prompt
+    assert "不确定" in prompt
+    assert "需教师确认" in prompt
+    assert "不得主动引入无关差异" in prompt
+    assert "教学类比" in prompt
+    assert "真实执行机制" in prompt
+    assert "SQL/数据库课程示例" in prompt
+    sql_example_match = re.search(r"SQL/数据库课程示例：.+GROUP_CONCAT.+DISTINCT.+GROUP BY.+组合", prompt)
+    assert sql_example_match is not None
+    assert "GROUP_CONCAT" in prompt
+    assert "GROUP_CONCAT(DISTINCT 字段)" in prompt
+    assert "按多个字段组成的组合键进行分组" in prompt
+    assert "MySQL 课程" in prompt
+    for course_keyword in ["Python", "C", "Arduino", "单片机", "传感器", "物联网项目", "专业英语"]:
+        assert course_keyword in prompt
+    assert "不得把 SQL 规则迁移到无关课程" in prompt
+    assert "客户为先、服务意识、创新精神" in prompt
+    assert "不得自动作为本节中心思政" in prompt
+    assert "不同课程应优先选择与本节核心任务更贴合的职业素养方向" in prompt
+    for professional_quality in ["数据准确性", "代码规范", "接线规范", "术语准确性"]:
+        assert professional_quality in prompt
     assert "审阅、修改与确认" in prompt
     assert "严禁编造政策文件、政策原文、标准编号、行业规范条款、真实企业案例、真实数据来源" in prompt
     assert "以上课程思政与职业素养融入点为 AI 根据当前材料生成的参考建议" in prompt
