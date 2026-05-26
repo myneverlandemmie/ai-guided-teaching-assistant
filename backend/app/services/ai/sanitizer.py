@@ -27,6 +27,10 @@ SENSITIVE_FIELD_NAMES = (
     "姓名",
     "手机号",
     "身份证号",
+    "API Key",
+    "Api Key",
+    "Token",
+    "密码",
 )
 _FIELD_PATTERN_TEXT = "|".join(re.escape(field) for field in sorted(SENSITIVE_FIELD_NAMES, key=len, reverse=True))
 SENSITIVE_FIELD_LINE_PATTERN = re.compile(
@@ -39,6 +43,11 @@ SENSITIVE_INLINE_PATTERN = re.compile(
 )
 PHONE_PATTERN = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
 ID_CARD_PATTERN = re.compile(r"(?<!\d)\d{17}[\dXx](?!\d)")
+CLASS_NAME_PATTERN = re.compile(r"(?<![A-Za-z0-9])\d{2,4}[\u4e00-\u9fa5A-Za-z]{1,20}\d*班(?![A-Za-z0-9])")
+TEACHER_NAME_PATTERN = re.compile(r"(?<![\u4e00-\u9fa5])[\u4e00-\u9fa5]{1,3}老师")
+API_KEY_PATTERN = re.compile(r"\b(?:sk|sk-ant|ds)-[A-Za-z0-9_-]{8,}\b", re.IGNORECASE)
+TOKEN_PATTERN = re.compile(r"\b(?:token|bearer)\s+['\"]?[A-Za-z0-9._-]{12,}['\"]?", re.IGNORECASE)
+PASSWORD_INLINE_PATTERN = re.compile(r"(?:密码|password)\s*(?:[:：=|\-—\s\t　]+)\S+", re.IGNORECASE)
 
 
 class LessonLike(Protocol):
@@ -82,8 +91,13 @@ def sanitize_text_for_outline(text: str | None) -> str:
         # 常见于教案封面、表格左列或表格提取后的“字段 | 内容”格式，整行删除更安全。
         if SENSITIVE_FIELD_LINE_PATTERN.match(line):
             continue
+        line = API_KEY_PATTERN.sub("[疑似密钥已移除]", line)
+        line = TOKEN_PATTERN.sub("[疑似 Token 已移除]", line)
+        line = PASSWORD_INLINE_PATTERN.sub("[密码信息已移除]", line)
         line = PHONE_PATTERN.sub("[已过滤手机号]", line)
         line = ID_CARD_PATTERN.sub("[已过滤身份证号]", line)
+        line = CLASS_NAME_PATTERN.sub("某班级", line)
+        line = TEACHER_NAME_PATTERN.sub("某教师", line)
         line = SENSITIVE_INLINE_PATTERN.sub("[已过滤行政信息]", line)
         sanitized_lines.append(line)
     return "\n".join(sanitized_lines)

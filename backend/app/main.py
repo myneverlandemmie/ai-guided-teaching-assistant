@@ -32,6 +32,7 @@ from app.services.ai.deepseek_client import (
     is_allowed_deepseek_model,
     normalize_model_name,
 )
+from app.services.ai.sanitizer import sanitize_text_for_outline
 from app.services.ai.session_key_store import (
     SESSION_COOKIE_NAME,
     clear_session_api_key,
@@ -717,11 +718,12 @@ async def generate_lesson_knowledge_outline(
             status_code=400,
         )
 
+    sanitized_generated_content = sanitize_text_for_outline(generated_outline.content)
     # AI 初稿和教师编辑稿初始一致，后续必须由教师编辑保存。
     outline = KnowledgeOutline(
         lesson_id=lesson.id,
-        ai_raw_output=generated_outline.content,
-        edited_content=generated_outline.content,
+        ai_raw_output=sanitized_generated_content,
+        edited_content=sanitized_generated_content,
         status="draft",
         generated_by_model=generated_outline.model_name,
     )
