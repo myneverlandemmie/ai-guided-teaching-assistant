@@ -972,6 +972,22 @@ async def test_lesson_detail_shows_knowledge_outline_entry(tmp_path: Path) -> No
         assert "默认基于本课次下已添加资料生成" in response.text
         assert "如果 PPT 覆盖多个课次或整章内容" in response.text
         assert "必须由教师复核后使用" in response.text
+        assert 'id="lesson-detail-outline-generation-form"' in response.text
+        assert "data-outline-generation-form" in response.text
+        assert 'data-loading-target="lesson-detail-outline-generation-hint"' in response.text
+        assert 'id="lesson-detail-outline-generation-button"' in response.text
+        assert "data-outline-generation-button" in response.text
+        assert 'id="lesson-detail-outline-generation-hint"' in response.text
+        assert "display:none" in response.text
+        assert 'onsubmit="return handleOutlineGenerationSubmit(this);"' in response.text
+        assert "handleOutlineGenerationSubmit" in response.text
+        assert "AI 正在生成，请稍候..." in response.text
+        assert "可能需要几十秒" in response.text
+        assert "服务繁忙" in response.text
+        assert "网络波动" in response.text
+        assert "超时" in response.text
+        assert "请勿重复点击、刷新页面或关闭窗口" in response.text
+        assert "生成失败时可稍后重试" in response.text
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
@@ -1936,12 +1952,24 @@ async def test_knowledge_outline_page_shows_generation_hint_and_disable_script(
         assert page_response.status_code == 200
         assert "正在调用 AI 生成知识主干" in page_response.text
         assert "deepseek-v4-pro" in page_response.text
-        assert "请勿重复点击或刷新页面" in page_response.text
+        assert "可能需要几十秒" in page_response.text
+        assert "服务繁忙" in page_response.text
+        assert "网络波动" in page_response.text
+        assert "超时" in page_response.text
+        assert "请勿重复点击、刷新页面或关闭窗口" in page_response.text
+        assert "生成失败时可稍后重试" in page_response.text
         assert "生成内容为 AI 草稿，需教师审核、修改与确认" in page_response.text
-        assert "outline-generation-form" in page_response.text
-        assert "outline-generation-button" in page_response.text
-        assert "outline-generation-hint" in page_response.text
-        assert "正在生成..." in page_response.text
+        assert 'id="outline-generation-form"' in page_response.text
+        assert "data-outline-generation-form" in page_response.text
+        assert 'data-loading-target="outline-generation-hint"' in page_response.text
+        assert 'id="outline-generation-button"' in page_response.text
+        assert "data-outline-generation-button" in page_response.text
+        assert 'id="outline-generation-hint"' in page_response.text
+        assert "data-outline-generation-hint" in page_response.text
+        assert "display:none" in page_response.text
+        assert 'onsubmit="return handleOutlineGenerationSubmit(this);"' in page_response.text
+        assert "handleOutlineGenerationSubmit" in page_response.text
+        assert "AI 正在生成，请稍候..." in page_response.text
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
