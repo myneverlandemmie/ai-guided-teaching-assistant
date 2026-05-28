@@ -1104,7 +1104,19 @@ async def test_default_lesson_draft_generation_creates_probe_and_low_guide(tmp_p
 
             guide_contents = {draft.draft_type: draft.content for draft in drafts}
             assert "低阶导学案" in guide_contents["guide_low"]
-            four_char_headings = ["学习导航", "知识要点", "边学边填", "例题引路", "仿做练习", "重点速记", "带回小练", "学习记录"]
+            four_char_headings = [
+                "学习导航",
+                "任务导入",
+                "知识要点",
+                "边学边填",
+                "例题引路",
+                "仿做练习",
+                "过程记录",
+                "重点速记",
+                "带回小练",
+                "学习记录",
+                "学习自评",
+            ]
             for content in [guide_contents["guide_low"]]:
                 for heading in four_char_headings:
                     assert heading in content
@@ -1115,7 +1127,7 @@ async def test_default_lesson_draft_generation_creates_probe_and_low_guide(tmp_p
 
         page_response = await client.get("/lessons/1/drafts")
         assert page_response.status_code == 200
-        assert "导学案前测" in page_response.text
+        assert "课前学情测试" in page_response.text
         assert "课前学情与学生导学案" in page_response.text
         assert "以下内容为教师草稿，仅供审阅、修改、复制，不会自动发布给学生" in page_response.text
         assert "低阶导学案是默认基础版本" in page_response.text
@@ -2007,7 +2019,7 @@ def test_knowledge_outline_prompt_contains_fixed_sections_and_disclaimers() -> N
         "## 3. 核心知识点",
         "## 4. 知识结构",
         "## 5. 重点与难点",
-        "## 6. 材料质量与教学重心诊断",
+        "## 6. 材料结构分析与教学重心提醒",
         "## 7. 课程思政与职业素养融入点",
         "## 8. 学生易错点",
         "## 9. 课堂任务建议",
@@ -2038,6 +2050,7 @@ def test_knowledge_outline_prompt_contains_fixed_sections_and_disclaimers() -> N
     assert "GROUP_CONCAT(DISTINCT 字段)" in prompt
     assert "按多个字段组成的组合键进行分组" in prompt
     assert "MySQL 课程" in prompt
+    assert "学生导学案素材提取" in prompt
     for course_keyword in ["Python", "C", "Arduino", "单片机", "传感器", "物联网项目", "专业英语"]:
         assert course_keyword in prompt
     assert "不得把 SQL 规则迁移到无关课程" in prompt
@@ -2220,7 +2233,7 @@ async def test_can_generate_mock_knowledge_outline_without_materials(tmp_path: P
                 "## 3. 核心知识点",
                 "## 4. 知识结构",
                 "## 5. 重点与难点",
-                "## 6. 材料质量与教学重心诊断",
+                "## 6. 材料结构分析与教学重心提醒",
                 "## 7. 课程思政与职业素养融入点",
                 "## 8. 学生易错点",
                 "## 9. 课堂任务建议",

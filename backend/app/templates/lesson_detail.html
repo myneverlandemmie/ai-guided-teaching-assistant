@@ -21,7 +21,7 @@
     </section>
     <section class="card">
       <h3>课程知识主干</h3>
-      <p>梳理本课知识要点、教学重心、材料质量诊断与可测知识点，为后续前测和导学案生成提供依据。</p>
+      <p>梳理本课知识要点、教学重心、材料结构分析与可测知识点，为后续前测和导学案生成提供依据。</p>
       {% if knowledge_outline %}
         <p>当前状态：{{ knowledge_outline_status_labels.get(knowledge_outline.status, knowledge_outline.status) }}</p>
         <p>{{ knowledge_outline.edited_content[:80] }}{% if knowledge_outline.edited_content|length > 80 %}...{% endif %}</p>
@@ -42,7 +42,7 @@
     </section>
     <section class="card" style="background:#f1f5f9; color:#64748b;">
       <h3>自动批阅演示</h3>
-      <p>基础编程与 SQL 小题自动批阅功能规划中，后续开放。</p>
+      <p>基础编程与 SQL 小题自动批阅属于规划中 / 实验性方向，后续按课程需要开放。</p>
       <p><span class="status">规划中</span></p>
     </section>
   </div>

@@ -1,4 +1,4 @@
-"""导学案前测与三阶导学案草稿生成服务。"""
+"""课前学情测试与三阶导学案草稿生成服务。"""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from app.models.lesson import Lesson
 from app.models.lesson_draft import LessonDraft
 
 DRAFT_TYPE_LABELS = {
-    "diagnostic_probe": "导学案前测",
+    "diagnostic_probe": "课前学情测试",
     "guide_low": "低阶导学案",
     "guide_mid": "中阶导学案",
     "guide_high": "高阶导学案",
@@ -53,7 +53,7 @@ class GeneratedLessonDraft:
 
 @dataclass(frozen=True)
 class DiagnosticQuestion:
-    """导学案前测题目结构。"""
+    """课前学情测试题目结构。"""
 
     question_type: str
     prompt: str
@@ -82,7 +82,7 @@ def _outline_excerpt(outline: KnowledgeOutline, max_length: int = 500) -> str:
 def _build_diagnostic_probe(lesson: Lesson, outline: KnowledgeOutline) -> GeneratedLessonDraft:
     lesson_name = _lesson_name(lesson)
     excerpt = _outline_excerpt(outline, 420)
-    content = f"""# {lesson_name}｜导学案前测草稿
+    content = f"""# {lesson_name}｜课前学情测试草稿
 
 > 本前测用于判断学习起点，不作为正式考试成绩。教师可复制到学习通或其他平台后自行筛选、修改和发布。
 
@@ -90,12 +90,13 @@ def _build_diagnostic_probe(lesson: Lesson, outline: KnowledgeOutline) -> Genera
 
 - 来源知识主干：{outline.id}
 - 核心材料摘要：{excerpt or "暂无知识主干摘要，需教师补充。"}
+- 诊断范围：基础概念、前置知识、任务背景理解、操作步骤、易错判断、安全规范、职业素养和进入本课任务所需的准备知识。
 
 ## 前测题目
 
 ### 题目 1
 - 题型：单选题
-- 题干：本节课最核心的学习任务更接近以下哪一项？
+- 题干：本节课开始前，学生最需要先弄清楚的是哪一项？
 - 选项：A. 记住全部材料原文；B. 识别核心概念并完成基础任务；C. 跳过基础直接做拓展；D. 只关注课堂纪律
 - 参考答案：B
 - 简短解析：前测关注学习起点，应先判断学生是否理解核心概念和基础任务。
@@ -112,27 +113,35 @@ def _build_diagnostic_probe(lesson: Lesson, outline: KnowledgeOutline) -> Genera
 
 ### 题目 3
 - 题型：填空题
-- 题干：本节课学习后，学生至少应能完成一个与核心知识相关的______任务。
+- 题干：进入本课任务前，学生至少应知道一个与本课相关的前置概念或______步骤。
 - 参考答案：基础练习 / 基础操作 / 基础应用
 - 简短解析：前测用于判断学生是否具备进入课堂任务的准备。
-- 诊断点：基础应用意识
+- 诊断点：前置知识与基础操作准备
 - 难度：基础
 
 ### 题目 4
 - 题型：单选题
-- 题干：遇到不确定的技术细节时，更合适的处理方式是？
-- 选项：A. 直接猜测；B. 写成确定结论；C. 标注需教师确认；D. 忽略不处理
+- 题干：完成课堂任务时，遇到结果、现象或步骤不确定，更合适的处理方式是？
+- 选项：A. 直接猜测；B. 写成确定结论；C. 记录问题并请教师确认；D. 忽略不处理
 - 参考答案：C
-- 简短解析：教师复核是 AI 草稿进入课堂前的必要环节。
-- 诊断点：技术准确性意识
+- 简短解析：记录和核验能帮助学生形成规范的学习与操作习惯。
+- 诊断点：易错判断与过程记录意识
 - 难度：中等
 
 ### 题目 5
 - 题型：判断题
-- 题干：导学案前测的结果可以帮助教师决定低 / 中 / 高阶导学案的使用复杂度。
+- 题干：课前学情测试的结果可以帮助教师决定低 / 中 / 高阶导学案的使用复杂度。
 - 参考答案：正确
 - 简短解析：前测用于学习起点诊断，不是正式成绩记录。
 - 诊断点：分层导学理解
+- 难度：基础
+
+### 题目 6
+- 题型：判断题
+- 题干：如果本课涉及实训、编程、数据处理或设备操作，学生应在学习单中记录关键步骤、观察结果、错误信息或安全规范。
+- 参考答案：正确
+- 简短解析：过程记录有助于教师判断学生是否具备进入课堂任务的准备。
+- 诊断点：安全规范、职业素养与过程记录
 - 难度：基础
 
 ## 导学案复杂度建议
@@ -147,7 +156,7 @@ def _build_diagnostic_probe(lesson: Lesson, outline: KnowledgeOutline) -> Genera
 - 教师应结合本班学生基础删改题目、答案和解析。
 - 本系统不发布题目、不统计学生结果、不对接学习通 API。
 """
-    return GeneratedLessonDraft("diagnostic_probe", f"{lesson_name}｜导学案前测", content)
+    return GeneratedLessonDraft("diagnostic_probe", f"{lesson_name}｜课前学情测试", content)
 
 
 def _build_guide(lesson: Lesson, outline: KnowledgeOutline, draft_type: str) -> GeneratedLessonDraft:
@@ -182,8 +191,15 @@ def _build_guide(lesson: Lesson, outline: KnowledgeOutline, draft_type: str) -> 
 
 - 本课主题：{lesson_name}
 - 使用建议：{audience}
-- 本课要学会什么：理解本节课核心知识，能说出关键概念或操作步骤。
-- 本课要完成什么任务：完成一个与本课内容一致的基础练习，并能检查自己的结果。
+- 本课学习目标：理解本节课核心知识，能说出关键概念或操作步骤。
+- 本课完成后能做什么：完成一个与本课内容一致的基础练习，并能检查自己的结果。
+- 教师确认提示：请教师根据本班学情删改目标和任务要求。
+
+## 任务导入
+
+- 本课要解决什么问题：围绕“{lesson_name}”完成一个与课堂材料一致的学习任务。
+- 为什么要学：本课知识可帮助我更规范地理解概念、完成操作、核验结果或记录过程。
+- 最后要完成什么任务：{task_style}
 
 ## 知识要点
 
@@ -212,6 +228,15 @@ def _build_guide(lesson: Lesson, outline: KnowledgeOutline, draft_type: str) -> 
 2. 任务要求：{task_style}
 3. 完成后写下我的检查方法：______________________________
 
+## 过程记录
+
+- 我的操作步骤 / 解题步骤：______________________________
+- 我的观察现象 / 运行结果 / 查询结果：______________________________
+- 我遇到的错误信息或异常现象：______________________________
+- 我的排查过程：______________________________
+- 我遵守的安全规范 / 职业规范：______________________________
+- 适用提示：本区可用于 Python、SQL、C、传感器、单片机、物联网项目、专业英语等课程的过程记录。
+
 ## 重点速记
 
 - 最重要的 3 句话：
@@ -236,6 +261,15 @@ def _build_guide(lesson: Lesson, outline: KnowledgeOutline, draft_type: str) -> 
 - 我还不太明白：______________________________
 - 我操作中遇到的问题：______________________________
 - 我想问老师的问题：______________________________
+
+## 学习自评
+
+- [ ] 我能说出本课关键概念。
+- [ ] 我能完成基础任务。
+- [ ] 我能指出一个易错点。
+- [ ] 我能遵守安全 / 规范要求。
+- 我还需要老师帮助的是：______________________________
+- 我的学习心得或问题反馈：______________________________
 
 ## AI 草稿声明
 
@@ -270,7 +304,7 @@ def generate_tiered_guide_draft(lesson: Lesson, outline: KnowledgeOutline, draft
 
 
 def parse_diagnostic_probe_questions(content: str) -> list[DiagnosticQuestion]:
-    """从导学案前测 Markdown 中解析题目，供学习通模板导出使用。"""
+    """从课前学情测试 Markdown 中解析题目，供学习通模板导出使用。"""
 
     questions: list[DiagnosticQuestion] = []
     blocks = re.split(r"(?m)^###\s*题目\s*\d+\s*$", content)

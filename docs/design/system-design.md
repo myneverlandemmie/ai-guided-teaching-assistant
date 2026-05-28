@@ -2,11 +2,11 @@
 
 ## 中文说明
 
-V0.2 采用轻量化 Web 架构，以 FastAPI 为后端核心。系统优先完成教学流程闭环，不追求复杂前端和大型平台化功能。
+V0.2 采用轻量化 Web 架构，以 FastAPI 为后端核心。系统优先完成“课次材料 → 课程知识主干 → 课前学情测试 → 学生导学案 → 教师编辑确认”的教学设计辅助闭环，不追求复杂前端和大型平台化功能。
 
 ## English Summary
 
-V0.2 uses a lightweight web architecture with FastAPI as the backend core. The goal is to complete the teaching workflow rather than building a complex frontend or a large platform.
+V0.2 uses a lightweight web architecture with FastAPI as the backend core. The goal is to complete an AI-assisted teaching design analysis and learning-guide generation workflow rather than building a complex frontend or a large platform.
 
 ## 架构概览 / Architecture Overview
 
@@ -19,7 +19,7 @@ Business Services / 业务服务
         ↓
 Database / 数据库
         ↓
-Mock AI / Future Real AI + Future SQL Grading Engine
+AI Services / Knowledge Outline + Draft Generation
 ```
 
 ## 主要模块 / Main Modules
@@ -27,17 +27,17 @@ Mock AI / Future Real AI + Future SQL Grading Engine
 1. Course plan import / 课程计划导入：已实现。
 2. Lesson management / 课次管理：已实现 planned lessons 确认、正式课次列表和详情页。
 3. Lesson material management / 课次材料管理：已实现粘贴文本、`.txt` / `.md`、`.docx`、实验性 `.pptx`、多文件上传、删除和默认标题。
-4. Mock AI knowledge outline / Mock AI 知识主干：已实现生成、编辑、保存和基础行政信息过滤。
+4. Knowledge outline / 课程知识主干：已实现真实 DeepSeek 生成、Mock 测试模式、编辑、保存和基础行政信息过滤。
 5. User and class management / 用户与班级管理：待实现。
-6. Real AI generation service / 真实 AI 生成服务：待实现。
-7. Guidebook and quiz management / 导学案与小测管理：待实现。
-8. SQL assignment and grading / SQL 作业与批阅：待实现。
-9. Teacher review / 教师复核：待实现。
-10. Learning summary / 学习总结：待实现。
+6. Diagnostic probe / 课前学情测试：已实现教师端草稿和学习通题库模板导出。
+7. Student learning guide / 学生导学案：已实现本地结构化草稿、教师编辑保存和 Markdown 下载。
+8. Automatic grading / 自动批阅：规划中 / 编程类课程实验性方向。
+9. Student-side workflow / 学生端：待实现。
+10. Learning platform integration / 学习平台 API：待实现。
 
 ## Current Runtime Context / 当前运行上下文
 
-当前开发阶段使用 demo course / demo teacher 作为临时上下文，目的是串联课程计划、课次、材料和知识主干页面。该方式不是最终试用方式。
+当前开发阶段使用 demo course / demo teacher 作为临时上下文，目的是串联课程计划、课次、材料、知识主干、课前学情测试和学生导学案页面。该方式不是最终试用方式。
 
 V0.2 演示 / 部门内试用阶段应补齐：
 
@@ -51,9 +51,9 @@ V0.2 演示 / 部门内试用阶段应补齐：
 
 ## AI Boundary / AI 边界
 
-当前知识主干由 Mock AI 规则生成，不调用真实 API。Mock 输出用于验证流程，不可作为最终案例中的真实 AI 生成成果。
+当前真实 AI 只接入课程知识主干生成。Mock 输出仅用于自动化测试或显式开发模式，不可作为最终案例中的真实 AI 生成成果。
 
-后续真实导学案、小测题、学习总结应接入真实 API。教师使用自己的 API Key，平台不提供公共 Token，不做 Token 转售。
+当前课前学情测试和学生导学案由本地结构化草稿生成，不调用真实 API。后续如接入真实导学案或其他生成链路，仍必须坚持“AI 输出由教师审核、修改、确认后使用”。教师使用自己的 API Key，平台不提供公共 Token，不做 Token 转售。
 
 V0.2 推荐会话级临时 API Key：
 
@@ -70,8 +70,8 @@ V0.2 推荐会话级临时 API Key：
 - Windows 单机体验：SQLite 兼容模式；
 - 当前开发和测试可使用 SQLite；
 - 当前使用 SQLAlchemy `create_all` 初始化，暂未引入 Alembic；
-- SQL 批阅：后续 V0.2 基础功能先支持 SELECT、WHERE、AS 和简单计算字段；
-- 完整 MySQL 题型作为后续增强。
+- 自动批阅：规划中 / 实验性方向，不作为当前核心主线；
+- SQL、Python、C 等编程类课程评分后续应按受控环境分别设计，不在当前系统设计主线中展开。
 
 ## Material Parsing Boundary / 材料解析边界
 

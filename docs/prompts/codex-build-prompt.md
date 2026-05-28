@@ -2,15 +2,15 @@
 
 ## 中文说明
 
-请你帮助构建“智学导评 V0.2：AI 导学与 SQL 自动批阅系统”。
+请你帮助构建“智学导评 V0.2：AI 辅助教学设计分析与导学案生成系统”。
 
-当前版本的目标是完成一个围绕数据库课程的教学闭环，不要扩展到完整 Python 批阅、OCR 拍照纠错或复杂前端工程。
+当前版本的目标是完成一个面向中职教师的 AI 辅助教学设计分析与导学案生成闭环，不要扩展到完整自动批阅、学生端、OCR 拍照纠错或复杂前端工程。
 
 ## English Instruction
 
-You are helping build the V0.2 version of an AI-guided SQL assessment platform for vocational database courses.
+You are helping build the V0.2 version of an AI-assisted teaching design analysis and learning-guide generation system for vocational teachers.
 
-The current version should focus on a complete SQL teaching workflow. Do not expand the project into full Python grading, OCR screenshot correction, or complex frontend engineering.
+The current version should focus on the teacher-side workflow from lesson materials to knowledge outline, diagnostic probe, and student learning guide. Do not expand the project into full grading, OCR screenshot correction, student-side workflows, or complex frontend engineering.
 
 ## 硬性约束 / Hard Constraints
 
@@ -46,7 +46,7 @@ The current version should focus on a complete SQL teaching workflow. Do not exp
 
 ## 第一阶段施工目标 / First Construction Target
 
-历史第一阶段目标是实现课程计划导入模块。当前该阶段已完成，并已继续完成到 Mock AI 知识主干生成。
+历史第一阶段目标是实现课程计划导入模块。当前该阶段已完成，并已继续完成到课程知识主干、课前学情测试和学生导学案草稿生成。
 
 后续 Codex 施工应基于当前实现状态继续，不要重复施工已完成模块。
 
@@ -101,15 +101,23 @@ The current version should focus on a complete SQL teaching workflow. Do not exp
 - Mock AI 知识主干生成；
 - 知识主干可编辑和保存；
 - 知识主干生成前对学校、教师、班级等行政信息做基础过滤；
-- 当前相关测试最后一次运行结果为 `50 passed`。
+- 课前学情测试草稿生成；
+- 学生导学案草稿生成；
+- 学习通题库模板导出；
+- 导学案 Markdown 下载；
+- 课次任务面板。
+
+测试状态以当前自动化测试结果为准。
 
 当前未实现，后续施工不得误称已完成：
 
 - 完整注册 / 登录；
 - 测试教师账号、测试学生账号、测试班级；
-- 真实 AI API；
-- 小测题生成；
-- 导学案生成；
+- 真实 API 生成导学案；
+- 自动批阅；
+- 学生端；
+- 学习通 API；
+- 统计分析；
 - SQL 作业提交和自动批阅；
 - Python 批阅；
 - OCR；
@@ -141,7 +149,7 @@ V0.2 演示 / 部门内试用阶段必须提供：
 
 ## Add-on Boundary / 加分原型边界
 
-SQL / MySQL 教学闭环仍然是 V0.2 主线。Python 批阅只能作为加分原型出现，不得替代 SQL 主线，不得影响课程计划上传、课次拆解、导学案、小测题、SQL 作业、教师复核和学习总结的交付。
+自动批阅不是当前 V0.2 主线。SQL、Python、C 等编程类评分只能作为后续实验性方向出现，不得影响课程计划上传、课次材料、知识主干、课前学情测试、学生导学案、教师编辑确认和辅助导出的交付。
 
 如实现 Python 基础题批阅 MVP，必须严格限制在中职学生入门题范围：
 

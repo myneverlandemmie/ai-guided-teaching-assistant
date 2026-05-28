@@ -1,12 +1,12 @@
-# AI Guided SQL Assessment Platform / 智学导评：AI 导学与 SQL 自动批阅系统
+# AI Guided Teaching Design Assistant / 智学导评：AI 辅助教学设计分析与导学案生成系统
 
 ## 中文说明
 
-本项目是“智学导评 V0.2”的工程仓库，用于建设一个面向中职数据库课程的 AI 导学与 SQL 自动批阅系统。
+本项目是“智学导评 V0.2”的工程仓库，用于建设一个面向中职教师的 AI 辅助教学设计分析与导学案生成系统。
 
-V0.2 版本聚焦数据库 / SQL / MySQL 入门教学，目标是在半个月内完成一个可演示、可部署、可用于案例申报的教学闭环系统。
+V0.2 版本聚焦“教师上传材料 → 系统提炼课程知识主干 → 生成课前学情测试 → 生成学生导学案 → 教师编辑确认后用于课堂”的演示闭环。系统不是 AI 自动备课系统，也不是一键生成完整教案或自动批阅作业的平台。
 
-截至当前文档基线，代码已经完成课程计划导入、课次确认、正式课次管理、课次材料上传与基础文本提取，以及会话级 API Key 管理 + DeepSeek Provider + 真实知识主干生成。SQL 自动批阅、真实 AI 导学案生成、小测题生成、学生端作业提交和完整登录注册仍属于后续施工内容。
+截至当前文档基线，代码已经完成课程计划导入、课次确认、正式课次管理、课次材料上传与基础文本提取、会话级 API Key 管理、DeepSeek Provider、真实知识主干生成、课前学情测试草稿、学生导学案草稿、学习通题库模板导出和导学案 Markdown 下载。自动批阅、学生端、学习通 API、完整登录注册仍属于规划中或实验性方向。
 
 核心流程：
 
@@ -14,19 +14,19 @@ V0.2 版本聚焦数据库 / SQL / MySQL 入门教学，目标是在半个月内
 2. 系统解析授课计划并自动拆解课次；
 3. 教师上传某一课次的教案或 PPT 文本；
 4. 教师设置当前会话 DeepSeek API Key；
-5. DeepSeek 生成知识主干初稿，教师可编辑保存；
-6. 后续接入真实 AI 生成小测题和分层导学案；
-7. 后续实现学生查看导学案并提交 SQL 作业；
-8. 后续实现系统自动批阅 SQL；
-9. 后续实现教师复核、学生反馈和学习总结。
+5. DeepSeek 生成课程知识主干初稿，教师可编辑保存；
+6. 系统基于知识主干生成课前学情测试草稿；
+7. 系统生成学生导学案草稿；
+8. 教师查看、编辑、确认后用于课堂；
+9. 学习通题库模板导出和 Markdown 下载作为辅助输出。
 
-当前版本以 SQL / MySQL 为主线，Python 自动批阅与 OCR 拍照纠错作为后续版本扩展。
+自动批阅相关能力统一作为编程类课程后续实验性方向，不作为 V0.2 当前核心主线。
 
 ## English Summary
 
-This repository contains the V0.2 implementation of an AI-guided SQL learning and assessment platform for vocational database courses.
+This repository contains the V0.2 implementation of an AI-assisted teaching design analysis and learning-guide generation system for vocational teachers.
 
-The current codebase has implemented course plan import, lesson confirmation, lesson material upload, basic `.docx` / `.pptx` text extraction, session-level API Key handling, and real DeepSeek-based knowledge outline generation. SQL grading, student assignment submission, guide generation, quiz generation, and full authentication are still planned work.
+The current codebase has implemented course plan import, lesson confirmation, lesson material upload, basic `.docx` / `.pptx` text extraction, session-level API Key handling, real DeepSeek-based knowledge outline generation, diagnostic probe drafts, student learning guide drafts, Chaoxing import-template export, and Markdown download. Auto grading, student-side workflows, external learning-platform APIs, and full authentication are still planned work.
 
 ## 三层使用模式 / Three Usage Modes
 
@@ -80,16 +80,23 @@ This project does not encourage external teachers to use the project owner's dem
 - 知识主干生成使用固定 Prompt 模板，包含课程思政与职业素养融入点、可测知识点与题型蓝图、补充内容建议和 AI 草稿声明；
 - 知识主干编辑和保存；
 - 知识主干生成前对学校、教师、班级等行政信息做基础过滤；
-- 当前自动化测试最后一次运行结果为 `75 passed`。
+- 课前学情测试草稿生成；
+- 学生导学案草稿生成；
+- 学习通题库模板导出；
+- 导学案 Markdown 下载；
+- 教师编辑保存草稿；
+- 课次任务面板。
 
 当前未实现：
 
 - 完整注册 / 登录；
 - 教师账号、学生账号、班级管理；
-- 导学案生成；
-- 小测题生成；
+- 真实 API 生成导学案；
 - SQL 作业提交与自动批阅；
 - Python 批阅；
+- 学生端；
+- 学习通 API；
+- 统计分析；
 - OCR、PDF、图片或扫描件解析；
 - 复杂 Vue / React 前端。
 
