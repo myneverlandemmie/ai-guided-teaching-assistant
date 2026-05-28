@@ -30,7 +30,7 @@
 20. 会话级 DeepSeek API Key 设置、掩码显示和清除；
 21. DeepSeek Provider 抽象；
 22. 真实 DeepSeek 知识主干生成；
-23. 没有 API Key 时阻止真实生成并提示先设置 Key；
+23. 没有 API Key 时可生成本地结构化知识主干草稿，用于演示和初稿准备；
 24. 第 8.1 轮真实 AI 接入后的安全、稳定性与边界加固；
 25. AI 设置页支持安全 `next` 返回来源页面；
 26. 课程列表页提供“查看正式课次”入口；
@@ -82,7 +82,7 @@
 
 ## AI Boundary / AI 边界
 
-当前真实 AI 只接入“知识主干生成”。正式页面路径默认使用 DeepSeek Provider；如果当前会话没有 API Key，系统会提示教师先到 `/ai/settings` 设置 Key，不会静默 fallback 到 Mock。
+当前真实 AI 只接入“知识主干生成”。正式页面路径默认使用 DeepSeek Provider；如果当前会话没有 API Key，系统会使用本地结构化草稿完成演示和初稿准备，并在页面中标注为“本地结构化草稿”，不包装成真实 AI 成果。
 
 Mock AI 仅用于自动化测试或显式设置 `AI_PROVIDER=mock` 的本地开发环境，不应保存为案例正式生成成果。
 

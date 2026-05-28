@@ -6,7 +6,7 @@
   <h2>{{ lesson.title }}</h2>
   <p>课次编码：{{ lesson.lesson_code or "未设置" }}</p>
   <p>提示：当前知识主干默认基于本课次下已添加资料生成。如果 PPT 覆盖多个课次或整章内容，建议只上传与本课次相关的页文本，或在生成后人工删改。AI 生成内容仅作为初稿，必须由教师复核后使用。</p>
-  <p>真实 AI 生成需要先<a href="/ai/settings?next=/lessons/{{ lesson.id }}/knowledge-outline">设置当前会话 DeepSeek API Key</a>。API Key 不会保存到数据库，本系统不提供公共 Token；测试或显式开发模式才使用 Mock。</p>
+  <p>如需使用真实 AI，可先<a href="/ai/settings?next=/lessons/{{ lesson.id }}/knowledge-outline">设置当前会话 DeepSeek API Key</a>。API Key 不会保存到数据库，本系统不提供公共 Token；未设置 API Key 时可生成本地结构化草稿用于演示和初稿准备。</p>
   <p>
     <a href="/lessons/{{ lesson.id }}">返回课次详情</a>
     ｜ <a href="/lessons/{{ lesson.id }}/drafts">前往课前学情与学生导学案</a>
@@ -23,7 +23,7 @@
 {% if outline %}
   <section class="card">
     <p>当前状态：{{ knowledge_outline_status_labels.get(outline.status, outline.status) }}</p>
-    <p>生成模型：{{ outline.generated_by_model }}</p>
+    <p>生成方式：{% if outline.generated_by_model in ["mock-ai-v0.2", "local-structured-draft"] %}本地结构化草稿{% else %}{{ outline.generated_by_model }}{% endif %}</p>
     <p>说明：本页内容为 AI 生成初稿，必须由教师编辑、复核后使用。</p>
     <form method="post" action="/knowledge-outlines/{{ outline.id }}/save">
       <label for="edited_content">知识主干内容</label><br>
@@ -35,7 +35,7 @@
   <section class="card">
     <p>当前课次还没有知识主干。请先生成 AI 初稿。</p>
     <p id="outline-generation-hint" data-outline-generation-hint role="status" aria-live="polite" style="display:none; padding:.75rem 1rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; line-height:1.7;">
-      正在调用 AI 生成知识主干。deepseek-v4-pro 生成可能需要几十秒；如服务繁忙，可能出现等待、排队、网络波动或超时。请勿重复点击、刷新页面或关闭窗口。生成失败时可稍后重试。生成内容为 AI 草稿，需教师审核、修改与确认。
+      正在生成知识主干。使用真实 AI 时可能需要几十秒；如服务繁忙，可能出现等待、排队、网络波动或超时。请勿重复点击、刷新页面或关闭窗口。生成失败时可稍后重试。无 API Key 时将使用本地结构化草稿。生成内容需教师审核、修改与确认。
     </p>
     <noscript>
       <p class="error">浏览器未启用 JavaScript。提交后请耐心等待 AI 生成完成，不要重复点击或刷新页面。</p>

@@ -32,6 +32,7 @@ V0.2 需要从 Mock AI 过渡到可用于案例展示和部门内试用的真实
 
 - `AI_PROVIDER=deepseek` 为正式默认路径；
 - `AI_PROVIDER=mock` 仅用于单元测试或显式本地开发；
+- 无 API Key 的演示流程可使用本地结构化草稿，但页面必须明确标注，不得包装成真实 AI 成果；
 - DeepSeek 模型选项由 `DEEPSEEK_ALLOWED_MODELS` 配置；
 - DeepSeek 默认模型由 `DEEPSEEK_DEFAULT_MODEL` 配置；
 - 教师可在 `/ai/settings` 页面选择当前会话使用的知识主干生成模型；
@@ -39,7 +40,7 @@ V0.2 需要从 Mock AI 过渡到可用于案例展示和部门内试用的真实
 - 清除 API Key 时同时清除模型选择；
 - 不使用 `deepseek-chat` 或 `deepseek-reasoner`。
 
-没有 API Key 时不能 silent fallback 到 Mock。原因是 Mock 只用于测试或显式本地开发，正式案例成果必须来自教师自行配置的真实 API。
+没有 API Key 时不能把本地结构化草稿包装成真实 AI 成果。当前为了本地演示稳定，允许无 Key 时生成“本地结构化草稿”；如果教师需要真实 AI 生成质量，应设置自己的 DeepSeek API Key。
 
 ## Consequences / 影响
 

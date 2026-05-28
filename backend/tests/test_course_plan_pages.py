@@ -1098,12 +1098,12 @@ async def test_default_lesson_draft_generation_creates_probe_and_low_guide(tmp_p
             assert {draft.generated_by for draft in drafts} == {"rule_based"}
 
             diagnostic = next(draft for draft in drafts if draft.draft_type == "diagnostic_probe")
-            for text_value in ["题目", "参考答案", "简短解析", "诊断点", "难度", "低复杂度", "中复杂度", "高复杂度"]:
+            for text_value in ["题目", "参考答案", "简短解析", "诊断点", "难度", "基础版建议", "提升版建议", "拓展版建议"]:
                 assert text_value in diagnostic.content
             assert "本前测用于判断学习起点，不作为正式考试成绩" in diagnostic.content
 
             guide_contents = {draft.draft_type: draft.content for draft in drafts}
-            assert "低阶导学案" in guide_contents["guide_low"]
+            assert "基础版导学案" in guide_contents["guide_low"]
             four_char_headings = [
                 "学习导航",
                 "任务导入",
@@ -1130,11 +1130,11 @@ async def test_default_lesson_draft_generation_creates_probe_and_low_guide(tmp_p
         assert "课前学情测试" in page_response.text
         assert "课前学情与学生导学案" in page_response.text
         assert "以下内容为教师草稿，仅供审阅、修改、复制，不会自动发布给学生" in page_response.text
-        assert "低阶导学案是默认基础版本" in page_response.text
-        assert "中阶 / 高阶导学案是可选分层版本" in page_response.text
-        assert "生成前测与低阶导学案" in page_response.text
-        assert "生成中阶导学案" in page_response.text
-        assert "生成高阶导学案" in page_response.text
+        assert "基础版导学案是默认基础版本" in page_response.text
+        assert "提升版 / 拓展版导学案是可选扩展版本" in page_response.text
+        assert "生成前测与基础版导学案" in page_response.text
+        assert "生成提升版导学案" in page_response.text
+        assert "生成拓展版导学案" in page_response.text
         assert "本地结构化草稿" in page_response.text
         assert "rule_based" not in page_response.text
         assert "rule-based" not in page_response.text
@@ -1165,8 +1165,8 @@ async def test_can_generate_mid_and_high_guides_after_low_guide_exists(tmp_path:
             assert draft_types == {"diagnostic_probe", "guide_low", "guide_mid", "guide_high"}
             guide_mid = next(draft for draft in drafts if draft.draft_type == "guide_mid")
             guide_high = next(draft for draft in drafts if draft.draft_type == "guide_high")
-            assert "中阶导学案" in guide_mid.content
-            assert "高阶导学案" in guide_high.content
+            assert "提升版导学案" in guide_mid.content
+            assert "拓展版导学案" in guide_high.content
             assert "学习导航" in guide_mid.content
             assert "学习导航" in guide_high.content
 
@@ -1300,7 +1300,7 @@ async def test_lesson_draft_can_be_edited_and_saved(tmp_path: Path) -> None:
 
         response = await client.post(
             f"/lessons/1/drafts/{draft_id}/save",
-            data={"title": "教师修改后的中阶导学案", "content": "教师已修改：保留关键提示并增加半开放任务。"},
+            data={"title": "教师修改后的提升版导学案", "content": "教师已修改：保留关键提示并增加半开放任务。"},
             follow_redirects=False,
         )
 
@@ -1309,7 +1309,7 @@ async def test_lesson_draft_can_be_edited_and_saved(tmp_path: Path) -> None:
         with session_factory() as session:
             saved = session.get(LessonDraft, draft_id)
             assert saved is not None
-            assert saved.title == "教师修改后的中阶导学案"
+            assert saved.title == "教师修改后的提升版导学案"
             assert saved.content == "教师已修改：保留关键提示并增加半开放任务。"
             assert saved.status == "reviewed"
     finally:
@@ -1579,7 +1579,9 @@ async def test_ai_settings_rejects_cross_origin_without_setting_key(tmp_path: Pa
 
 
 @pytest.mark.anyio
-async def test_deepseek_generation_without_api_key_prompts_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_deepseek_generation_without_api_key_uses_local_structured_draft(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("AI_PROVIDER", "deepseek")
     client, session_factory = _build_test_client(tmp_path)
     course = _create_course(session_factory)
@@ -1600,11 +1602,14 @@ async def test_deepseek_generation_without_api_key_prompts_settings(tmp_path: Pa
             follow_redirects=False,
         )
 
-        assert response.status_code == 400
-        assert "请先设置当前会话 DeepSeek API Key" in response.text
-        assert "/ai/settings" in response.text
+        assert response.status_code == 303
+        assert response.headers["location"] == "/lessons/1/knowledge-outline"
         with session_factory() as session:
-            assert session.scalar(select(KnowledgeOutline)) is None
+            outline = session.scalar(select(KnowledgeOutline))
+            assert outline is not None
+            assert outline.generated_by_model == "local-structured-draft"
+            assert "本地结构化草稿" in outline.edited_content
+            assert "仅供教师参考，需教师审阅、修改与确认" in outline.edited_content
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
@@ -2388,7 +2393,8 @@ async def test_knowledge_outline_page_and_save_reviewed_content(
 
         assert page_response.status_code == 200
         assert "知识主干内容" in page_response.text
-        assert "mock-ai-v0.2" in page_response.text
+        assert "本地结构化草稿" in page_response.text
+        assert "mock-ai-v0.2" not in page_response.text
         assert "默认基于本课次下已添加资料生成" in page_response.text
         assert "/ai/settings?next=/lessons/1/knowledge-outline" in page_response.text
         assert "前往课前学情与学生导学案" in page_response.text
@@ -2434,15 +2440,15 @@ async def test_knowledge_outline_page_shows_generation_hint_and_disable_script(
         page_response = await client.get("/lessons/1/knowledge-outline")
 
         assert page_response.status_code == 200
-        assert "正在调用 AI 生成知识主干" in page_response.text
-        assert "deepseek-v4-pro" in page_response.text
+        assert "正在生成知识主干" in page_response.text
+        assert "使用真实 AI 时" in page_response.text
         assert "可能需要几十秒" in page_response.text
         assert "服务繁忙" in page_response.text
         assert "网络波动" in page_response.text
         assert "超时" in page_response.text
         assert "请勿重复点击、刷新页面或关闭窗口" in page_response.text
         assert "生成失败时可稍后重试" in page_response.text
-        assert "生成内容为 AI 草稿，需教师审核、修改与确认" in page_response.text
+        assert "生成内容需教师审核、修改与确认" in page_response.text
         assert 'id="outline-generation-form"' in page_response.text
         assert "data-outline-generation-form" in page_response.text
         assert 'data-loading-target="outline-generation-hint"' in page_response.text

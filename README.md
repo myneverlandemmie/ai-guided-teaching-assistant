@@ -13,8 +13,8 @@ V0.2 版本聚焦“教师上传材料 → 系统提炼课程知识主干 → �
 1. 教师上传课程授课计划 Excel；
 2. 系统解析授课计划并自动拆解课次；
 3. 教师上传某一课次的教案或 PPT 文本；
-4. 教师设置当前会话 DeepSeek API Key；
-5. DeepSeek 生成课程知识主干初稿，教师可编辑保存；
+4. 教师可设置当前会话 DeepSeek API Key；未设置时可使用本地结构化草稿演示主流程；
+5. 系统生成课程知识主干初稿，教师可编辑保存；
 6. 系统基于知识主干生成课前学情测试草稿；
 7. 系统生成学生导学案草稿；
 8. 教师查看、编辑、确认后用于课堂；
@@ -76,6 +76,7 @@ This project does not encourage external teachers to use the project owner's dem
 - 会话级 DeepSeek API Key 设置、掩码显示和清除；
 - DeepSeek Provider；
 - 真实 DeepSeek 知识主干生成；
+- 无 API Key 时可生成本地结构化知识主干草稿，用于演示和初稿准备；
 - AI 设置页支持教师选择当前会话 DeepSeek 模型；
 - 知识主干生成使用固定 Prompt 模板，包含课程思政与职业素养融入点、可测知识点与题型蓝图、补充内容建议和 AI 草稿声明；
 - 知识主干编辑和保存；
@@ -171,7 +172,7 @@ AI_PROMPT_MATERIAL_MAX_CHARS=12000
 - `AI_SESSION_KEY_IDLE_TIMEOUT_SECONDS=14400`：当前会话 API Key 空闲 4 小时后自动失效；
 - `AI_SESSION_KEY_MAX_ENTRIES=200`：单进程内存最多保留 200 个会话 Key，超限会清理过期或最久未使用项；
 - `AI_PROMPT_MATERIAL_MAX_CHARS=12000`：构造知识主干 prompt 时使用的材料字符上限；
-- Mock 只用于自动化测试或显式 `AI_PROVIDER=mock` 的本地开发模式；
+- Mock 只用于自动化测试或显式 `AI_PROVIDER=mock` 的本地开发模式；正式演示缺少 API Key 时显示为“本地结构化草稿”，不包装成真实 AI 成果；
 - 真实 AI 目前只接入知识主干生成；
 - 当前方案是 V0.2 本地开发 / 部门内试用级临时方案，不是生产级凭据管理系统。
 

@@ -109,7 +109,7 @@ def generate_mock_knowledge_outline(lesson: Lesson, materials: list[LessonMateri
         [
             f"# {sanitized_lesson.lesson_code + '-' if sanitized_lesson.lesson_code else ''}{sanitized_lesson.title} 知识主干草稿",
             "",
-            "生成说明：本内容由 Mock AI 规则生成，仅用于演示流程，仅供教师参考，需教师审阅、修改与确认。",
+            "生成说明：本内容为本地结构化草稿，用于演示和初稿生成，仅供教师参考，需教师审阅、修改与确认。",
             "",
             "## 1. 本节课定位",
             f"本节课围绕“{sanitized_lesson.title}”展开，教学内容摘要为：{sanitized_lesson.content_summary or '暂无摘要'}",

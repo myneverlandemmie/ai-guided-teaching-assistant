@@ -14,9 +14,9 @@ from app.models.lesson_draft import LessonDraft
 
 DRAFT_TYPE_LABELS = {
     "diagnostic_probe": "课前学情测试",
-    "guide_low": "低阶导学案",
-    "guide_mid": "中阶导学案",
-    "guide_high": "高阶导学案",
+    "guide_low": "基础版导学案",
+    "guide_mid": "提升版导学案",
+    "guide_high": "拓展版导学案",
 }
 CHAOXING_HEADERS = [
     "目录",
@@ -107,7 +107,7 @@ def _build_diagnostic_probe(lesson: Lesson, outline: KnowledgeOutline) -> Genera
 - 题型：判断题
 - 题干：如果学生对本节课的关键术语还不熟悉，导学案应提供更细步骤和更多示例。
 - 参考答案：正确
-- 简短解析：基础薄弱学生需要低阶导学案支持。
+- 简短解析：需要更多支撑的学生可以先使用基础版导学案。
 - 诊断点：学习支持需求
 - 难度：基础
 
@@ -130,7 +130,7 @@ def _build_diagnostic_probe(lesson: Lesson, outline: KnowledgeOutline) -> Genera
 
 ### 题目 5
 - 题型：判断题
-- 题干：课前学情测试的结果可以帮助教师决定低 / 中 / 高阶导学案的使用复杂度。
+- 题干：课前学情测试的结果可以帮助教师决定使用基础版、提升版或拓展版导学案。
 - 参考答案：正确
 - 简短解析：前测用于学习起点诊断，不是正式成绩记录。
 - 诊断点：分层导学理解
@@ -146,9 +146,9 @@ def _build_diagnostic_probe(lesson: Lesson, outline: KnowledgeOutline) -> Genera
 
 ## 导学案复杂度建议
 
-- 低复杂度：多数学生对核心术语、基本步骤或任务目标不熟悉。
-- 中复杂度：多数学生能理解基本概念，但需要关键提示完成任务。
-- 高复杂度：多数学生能独立完成基础任务，可增加迁移、排错和反思。
+- 基础版建议：多数学生对核心术语、基本步骤或任务目标还不熟悉。
+- 提升版建议：多数学生能理解基本概念，但需要关键提示完成任务。
+- 拓展版建议：多数学生能独立完成基础任务，可增加迁移、排错和反思。
 
 ## 教师提示
 
@@ -164,20 +164,20 @@ def _build_guide(lesson: Lesson, outline: KnowledgeOutline, draft_type: str) -> 
     excerpt = _outline_excerpt(outline)
     guide_settings = {
         "guide_low": (
-            "低阶导学案",
-            "默认基础版本，步骤更细、示例更多、提示更充分，适合基础薄弱学生。",
+            "基础版导学案",
+            "默认基础版本，步骤更细、示例更多、提示更充分，适合需要更多学习支撑的学生。",
             "先按示例完成一个基础任务，再仿照完成一个同类小任务。",
             "1. 先读示例；2. 再补全步骤；3. 最后检查结果。",
         ),
         "guide_mid": (
-            "中阶导学案",
-            "可选分层版本，适合基础一般、有一定独立完成能力的学生。",
+            "提升版导学案",
+            "可选扩展版本，适合已有一定基础、有独立完成能力的学生。",
             "先完成基础任务，再根据提示调整条件、步骤或表达方式。",
             "保留关键节点提示，其余过程由学生独立补全。",
         ),
         "guide_high": (
-            "高阶导学案",
-            "可选分层版本，适合掌握较快、可进行迁移和排错的学生。",
+            "拓展版导学案",
+            "可选扩展版本，适合已完成基础任务、可进行迁移和排错的学生。",
             "完成迁移任务、错误排查和方法说明。",
             "仅保留任务目标，鼓励学生比较方案、解释原因并复盘错误。",
         ),
@@ -290,16 +290,16 @@ def generate_lesson_drafts(lesson: Lesson, outline: KnowledgeOutline) -> list[Ge
 
 
 def generate_basic_lesson_drafts(lesson: Lesson, outline: KnowledgeOutline) -> list[GeneratedLessonDraft]:
-    """默认生成前测和低阶导学案，符合先诊断再分层的教学流程。"""
+    """默认生成前测和基础版导学案，符合先诊断再分层的教学流程。"""
 
     return [_build_diagnostic_probe(lesson, outline), _build_guide(lesson, outline, "guide_low")]
 
 
 def generate_tiered_guide_draft(lesson: Lesson, outline: KnowledgeOutline, draft_type: str) -> GeneratedLessonDraft:
-    """按需生成中阶或高阶导学案草稿。"""
+    """按需生成提升版或拓展版导学案草稿。"""
 
     if draft_type not in {"guide_mid", "guide_high"}:
-        raise ValueError("仅支持生成中阶或高阶导学案")
+        raise ValueError("仅支持生成提升版或拓展版导学案")
     return _build_guide(lesson, outline, draft_type)
 
 

@@ -14,7 +14,7 @@
   <h2>使用说明</h2>
   <p>以下内容为教师草稿，仅供审阅、修改、复制，不会自动发布给学生，不代表最终教学设计。AI 或规则生成内容必须经教师审核、修改和确认。</p>
   <p>课前学情测试用于判断学习起点，不作为正式考试成绩；本系统不做学生答题、不做发布、不做统计、不对接学习通 API。</p>
-  <p>低阶导学案是默认基础版本；中阶 / 高阶导学案是可选分层版本。教师应结合前测结果选择使用。</p>
+  <p>基础版导学案是默认基础版本；提升版 / 拓展版导学案是可选扩展版本。教师应结合前测结果选择使用。</p>
   <p>导学案采用学生学习单风格，供学生填写、记录学习过程、整理笔记和课后复盘。</p>
   {% if chaoxing_export_url %}
     <p class="status">学习通题库模板已生成：<a href="{{ chaoxing_export_url }}">下载学习通题库模板</a></p>
@@ -24,7 +24,7 @@
   {% endif %}
   {% if outline %}
     <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate">
-      <button type="submit">生成前测与低阶导学案</button>
+      <button type="submit">生成前测与基础版导学案</button>
     </form>
   {% else %}
     <p><a href="/lessons/{{ lesson.id }}/knowledge-outline">先生成并保存知识主干</a></p>
@@ -34,13 +34,13 @@
 {% if drafts %}
   {% if has_low_guide %}
     <section class="card">
-      <h2>可选分层生成</h2>
-      <p>建议教师先复核低阶导学案，再根据前测学情选择是否生成中阶或高阶导学案。</p>
+      <h2>可选扩展生成</h2>
+      <p>建议教师先复核基础版导学案，再根据前测学情选择是否生成提升版或拓展版导学案。</p>
       <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_mid" style="display:inline-block; margin-right:.75rem;">
-        <button type="submit">生成中阶导学案</button>
+        <button type="submit">生成提升版导学案</button>
       </form>
       <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_high" style="display:inline-block;">
-        <button type="submit">生成高阶导学案</button>
+        <button type="submit">生成拓展版导学案</button>
       </form>
     </section>
   {% endif %}

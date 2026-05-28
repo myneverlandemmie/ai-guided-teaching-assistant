@@ -749,20 +749,6 @@ async def generate_lesson_knowledge_outline(
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
     api_key = get_session_api_key(session_id)
     selected_model = get_session_selected_model(session_id) or get_default_deepseek_model()
-    provider_name = ai_provider.get_ai_provider_name()
-    if provider_name == "deepseek" and not api_key:
-        return templates.TemplateResponse(
-            request,
-            "knowledge_outline.html",
-            {
-                "lesson": lesson,
-                "outline": _get_latest_knowledge_outline(db, lesson.id),
-                "knowledge_outline_status_labels": KNOWLEDGE_OUTLINE_STATUS_LABELS,
-                "error_message": "请先设置当前会话 DeepSeek API Key，再生成知识主干。",
-                "ai_provider": provider_name,
-            },
-            status_code=400,
-        )
     lesson_for_ai = SimpleNamespace(
         lesson_code=lesson.lesson_code,
         title=lesson.title,
@@ -857,7 +843,7 @@ async def show_lesson_drafts(
             "draft_status_labels": LESSON_DRAFT_STATUS_LABELS,
             "has_low_guide": any(draft.draft_type == "guide_low" for draft in drafts),
             "chaoxing_export_url": f"/exports/chaoxing/{chaoxing_filename}" if chaoxing_filename else None,
-            "error_message": None if outline else "请先生成并保存知识主干，再生成导学案前测与三阶导学案草稿。",
+            "error_message": None if outline else "请先生成并保存知识主干，再生成课前学情测试与学生导学案草稿。",
         },
     )
 
@@ -867,7 +853,7 @@ async def generate_lesson_drafts_route(
     lesson_id: int,
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
-    """默认生成或更新导学案前测与低阶导学案。"""
+    """默认生成或更新课前学情测试与基础版导学案。"""
 
     lesson = db.get(Lesson, lesson_id)
     if lesson is None:
@@ -888,7 +874,7 @@ async def generate_tiered_lesson_draft_route(
     draft_type: str,
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
-    """按需生成或更新中阶 / 高阶导学案。"""
+    """按需生成或更新提升版 / 拓展版导学案。"""
 
     if draft_type not in {"guide_mid", "guide_high"}:
         raise HTTPException(status_code=404, detail="导学草稿类型不存在")

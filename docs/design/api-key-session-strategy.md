@@ -81,7 +81,7 @@ V0.2 当前使用“会话级临时 API Key”：
 
 `AI_PROVIDER=deepseek` 是正式默认路径：
 
-- 当前会话没有 API Key 时，阻止真实生成并提示教师先设置 Key；
+- 当前会话没有 API Key 时，不调用真实 DeepSeek，改用本地结构化草稿完成演示和初稿准备；
 - 有 API Key 时调用 DeepSeek Provider；
 - `generated_by_model` 记录实际模型名，例如 `deepseek-v4-pro` 或 `deepseek-v4-flash`；
 - 教师可在 AI 设置页选择当前会话知识主干生成模型；
@@ -91,7 +91,7 @@ V0.2 当前使用“会话级临时 API Key”：
 - `edited_content` 初始等于模型正文；
 - 教师保存后状态变为 `reviewed`。
 
-`AI_PROVIDER=mock` 只用于单元测试或显式本地开发。正式页面不得在缺少 API Key 时静默 fallback 到 Mock。
+`AI_PROVIDER=mock` 只用于单元测试或显式本地开发。正式页面缺少 API Key 时只能显示为“本地结构化草稿”，不得包装成真实 AI 成果。
 
 ## DeepSeek Configuration / DeepSeek 配置
 
