@@ -11,19 +11,42 @@
   <p><a href="/courses/{{ lesson.course_id }}/lessons">返回课次列表</a></p>
 </section>
 
-<h2>知识主干</h2>
+<h2>课次任务面板</h2>
 <section class="card">
-  {% if knowledge_outline %}
-    <p>已生成知识主干，当前状态：{{ knowledge_outline_status_labels.get(knowledge_outline.status, knowledge_outline.status) }}</p>
-    <p>{{ knowledge_outline.edited_content[:120] }}{% if knowledge_outline.edited_content|length > 120 %}...{% endif %}</p>
-    <p><a href="/lessons/{{ lesson.id }}/knowledge-outline">查看并编辑知识主干</a></p>
-  {% else %}
-    <p>当前课次还没有知识主干。可基于课次信息和已添加资料生成一版 AI 初稿，再由教师编辑确认。</p>
-    <p><a href="/lessons/{{ lesson.id }}/knowledge-outline">查看知识主干</a></p>
-  {% endif %}
-  <p>提示：当前知识主干默认基于本课次下已添加资料生成。如果 PPT 覆盖多个课次或整章内容，建议只上传与本课次相关的页文本，或在生成后人工删改。AI 生成内容仅作为初稿，必须由教师复核后使用。</p>
-  <p>真实 AI 生成需要先在 <a href="/ai/settings?next=/lessons/{{ lesson.id }}">AI 设置</a> 中填写当前会话 DeepSeek API Key；Key 不会保存到数据库，本系统不提供公共 Token。</p>
-  <p><a href="/lessons/{{ lesson.id }}/drafts">导学案前测与三阶导学案</a></p>
+  <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+    <section class="card">
+      <h3>AI 配置</h3>
+      <p>设置当前会话 API Key 与模型。API Key 不入库，仅用于当前会话。</p>
+      <p><a href="/ai/settings?next=/lessons/{{ lesson.id }}">前往 AI 设置</a></p>
+    </section>
+    <section class="card">
+      <h3>课程知识主干</h3>
+      <p>梳理本课知识要点、教学重心、材料质量诊断与可测知识点，为后续前测和导学案生成提供依据。</p>
+      {% if knowledge_outline %}
+        <p>当前状态：{{ knowledge_outline_status_labels.get(knowledge_outline.status, knowledge_outline.status) }}</p>
+        <p>{{ knowledge_outline.edited_content[:80] }}{% if knowledge_outline.edited_content|length > 80 %}...{% endif %}</p>
+        <p><a href="/lessons/{{ lesson.id }}/knowledge-outline">查看知识主干</a></p>
+      {% else %}
+        <p><a href="/lessons/{{ lesson.id }}/knowledge-outline">生成知识主干</a></p>
+      {% endif %}
+    </section>
+    <section class="card">
+      <h3>课前学情测试</h3>
+      <p>基于课程知识主干生成导学前测，可导出为超星学习通题库模板，用于判断学生学习起点。</p>
+      <p><a href="/lessons/{{ lesson.id }}/drafts">前往课前学情测试</a></p>
+    </section>
+    <section class="card">
+      <h3>学生导学案</h3>
+      <p>生成学生可填写、可整理笔记的低阶导学案，并可根据学情生成中阶、高阶分层版本。</p>
+      <p><a href="/lessons/{{ lesson.id }}/drafts">前往学生导学案</a></p>
+    </section>
+    <section class="card" style="background:#f1f5f9; color:#64748b;">
+      <h3>自动批阅演示</h3>
+      <p>基础编程与 SQL 小题自动批阅功能规划中，后续开放。</p>
+      <p><span class="status">规划中</span></p>
+    </section>
+  </div>
+  <p>提示：知识主干默认基于本课次下已添加资料生成。如果 PPT 覆盖多个课次或整章内容，建议只上传与本课次相关的页文本，或在生成后人工删改。AI 生成内容仅作为初稿，必须由教师复核后使用。</p>
   <p id="lesson-detail-outline-generation-hint" data-outline-generation-hint role="status" aria-live="polite" style="display:none; padding:.75rem 1rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; line-height:1.7;">
     正在调用 AI 生成知识主干。deepseek-v4-pro 生成可能需要几十秒；如服务繁忙，可能出现等待、排队、网络波动或超时。请勿重复点击、刷新页面或关闭窗口。生成失败时可稍后重试。生成内容为 AI 草稿，需教师审核、修改与确认。
   </p>

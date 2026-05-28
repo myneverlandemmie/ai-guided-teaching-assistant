@@ -29,6 +29,7 @@ from app.services.ai.deepseek_client import (
     is_allowed_deepseek_model,
 )
 from app.services.ai.provider import GeneratedOutline
+from app.services.ai.lesson_draft_service import build_chaoxing_catalog
 from app.services.ai.sanitizer import sanitize_text_for_outline
 from app.services.ai.session_key_store import (
     SESSION_COOKIE_NAME,
@@ -1014,7 +1015,15 @@ async def test_lesson_detail_shows_knowledge_outline_entry(tmp_path: Path) -> No
         response = await client.get("/lessons/1")
 
         assert response.status_code == 200
-        assert "知识主干" in response.text
+        assert "课次任务面板" in response.text
+        assert "AI 配置" in response.text
+        assert "课程知识主干" in response.text
+        assert "课前学情测试" in response.text
+        assert "学生导学案" in response.text
+        assert "自动批阅演示" in response.text
+        assert "规划中" in response.text
+        assert "前往课前学情测试" in response.text
+        assert "前往学生导学案" in response.text
         assert "生成知识主干" in response.text
         assert "/lessons/1/knowledge-outline" in response.text
         assert "/ai/settings?next=/lessons/1" in response.text
@@ -1037,7 +1046,6 @@ async def test_lesson_detail_shows_knowledge_outline_entry(tmp_path: Path) -> No
         assert "超时" in response.text
         assert "请勿重复点击、刷新页面或关闭窗口" in response.text
         assert "生成失败时可稍后重试" in response.text
-        assert "导学案前测与三阶导学案" in response.text
         assert "/lessons/1/drafts" in response.text
         assert "/demo-grading/sql" not in response.text
         assert "/demo-grading/python" not in response.text
@@ -1057,7 +1065,7 @@ async def test_lesson_drafts_page_requires_knowledge_outline(tmp_path: Path) -> 
         response = await client.get("/lessons/1/drafts")
 
         assert response.status_code == 200
-        assert "导学案前测与三阶导学案" in response.text
+        assert "课前学情与学生导学案" in response.text
         assert "请先生成并保存知识主干" in response.text
         assert "本系统不做学生答题、不做发布、不做统计、不对接学习通 API" in response.text
         with session_factory() as session:
@@ -1068,7 +1076,7 @@ async def test_lesson_drafts_page_requires_knowledge_outline(tmp_path: Path) -> 
 
 
 @pytest.mark.anyio
-async def test_generate_lesson_drafts_creates_four_teacher_drafts(tmp_path: Path) -> None:
+async def test_default_lesson_draft_generation_creates_probe_and_low_guide(tmp_path: Path) -> None:
     client, session_factory = _build_test_client(tmp_path)
     course = _create_course(session_factory)
     try:
@@ -1081,12 +1089,10 @@ async def test_generate_lesson_drafts_creates_four_teacher_drafts(tmp_path: Path
         assert response.headers["location"] == "/lessons/1/drafts"
         with session_factory() as session:
             drafts = session.scalars(select(LessonDraft).order_by(LessonDraft.draft_type)).all()
-            assert len(drafts) == 4
+            assert len(drafts) == 2
             assert {draft.draft_type for draft in drafts} == {
                 "diagnostic_probe",
                 "guide_low",
-                "guide_mid",
-                "guide_high",
             }
             assert {draft.status for draft in drafts} == {"draft"}
             assert {draft.generated_by for draft in drafts} == {"rule_based"}
@@ -1098,10 +1104,8 @@ async def test_generate_lesson_drafts_creates_four_teacher_drafts(tmp_path: Path
 
             guide_contents = {draft.draft_type: draft.content for draft in drafts}
             assert "低阶导学案" in guide_contents["guide_low"]
-            assert "中阶导学案" in guide_contents["guide_mid"]
-            assert "高阶导学案" in guide_contents["guide_high"]
             four_char_headings = ["学习导航", "知识要点", "边学边填", "例题引路", "仿做练习", "重点速记", "带回小练", "学习记录"]
-            for content in [guide_contents["guide_low"], guide_contents["guide_mid"], guide_contents["guide_high"]]:
+            for content in [guide_contents["guide_low"]]:
                 for heading in four_char_headings:
                     assert heading in content
                 assert "AI 草稿声明" in content
@@ -1112,13 +1116,52 @@ async def test_generate_lesson_drafts_creates_four_teacher_drafts(tmp_path: Path
         page_response = await client.get("/lessons/1/drafts")
         assert page_response.status_code == 200
         assert "导学案前测" in page_response.text
+        assert "课前学情与学生导学案" in page_response.text
         assert "以下内容为教师草稿，仅供审阅、修改、复制，不会自动发布给学生" in page_response.text
         assert "低阶导学案是默认基础版本" in page_response.text
         assert "中阶 / 高阶导学案是可选分层版本" in page_response.text
+        assert "生成前测与低阶导学案" in page_response.text
+        assert "生成中阶导学案" in page_response.text
+        assert "生成高阶导学案" in page_response.text
         assert "本地结构化草稿" in page_response.text
         assert "rule_based" not in page_response.text
         assert "rule-based" not in page_response.text
         assert "mock" not in page_response.text
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_can_generate_mid_and_high_guides_after_low_guide_exists(tmp_path: Path) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _create_first_lesson(client, session_factory, course)
+        _create_reviewed_outline(session_factory)
+        await client.post("/lessons/1/drafts/generate", follow_redirects=False)
+
+        mid_response = await client.post("/lessons/1/drafts/generate/guide_mid", follow_redirects=False)
+        high_response = await client.post("/lessons/1/drafts/generate/guide_high", follow_redirects=False)
+
+        assert mid_response.status_code == 303
+        assert high_response.status_code == 303
+        with session_factory() as session:
+            drafts = session.scalars(select(LessonDraft).order_by(LessonDraft.draft_type)).all()
+            assert len(drafts) == 4
+            draft_types = {draft.draft_type for draft in drafts}
+            assert draft_types == {"diagnostic_probe", "guide_low", "guide_mid", "guide_high"}
+            guide_mid = next(draft for draft in drafts if draft.draft_type == "guide_mid")
+            guide_high = next(draft for draft in drafts if draft.draft_type == "guide_high")
+            assert "中阶导学案" in guide_mid.content
+            assert "高阶导学案" in guide_high.content
+            assert "学习导航" in guide_mid.content
+            assert "学习导航" in guide_high.content
+
+            for draft in [guide_mid, guide_high]:
+                download_response = await client.get(f"/lessons/1/drafts/{draft.id}/download-md")
+                assert download_response.status_code == 200
+                assert "text/markdown" in download_response.headers["content-type"]
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
@@ -1133,6 +1176,14 @@ async def test_diagnostic_probe_exports_chaoxing_template(tmp_path: Path) -> Non
         _create_reviewed_outline(session_factory)
         await client.post("/lessons/1/drafts/generate", follow_redirects=False)
         with session_factory() as session:
+            saved_course = session.get(Course, course.id)
+            lesson = session.get(Lesson, 1)
+            assert saved_course is not None
+            assert lesson is not None
+            saved_course.title = "数据库基础"
+            lesson.lesson_code = "0406"
+            lesson.title = "分组查询"
+            session.commit()
             draft = session.scalar(select(LessonDraft).where(LessonDraft.draft_type == "diagnostic_probe"))
             assert draft is not None
             draft_id = draft.id
@@ -1153,6 +1204,9 @@ async def test_diagnostic_probe_exports_chaoxing_template(tmp_path: Path) -> Non
             assert header in headers
         rows = list(worksheet.iter_rows(min_row=2, values_only=True))
         assert len(rows) >= 5
+        catalogs = {row[0] for row in rows}
+        assert "/数据库基础/0406-分组查询" in catalogs
+        assert all("智学导评" not in str(catalog) for catalog in catalogs)
         question_types = {row[1] for row in rows}
         assert {"单选题", "判断题", "填空题"}.issubset(question_types)
         judgment_row = next(row for row in rows if row[1] == "判断题")
@@ -1168,6 +1222,23 @@ async def test_diagnostic_probe_exports_chaoxing_template(tmp_path: Path) -> Non
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
+
+
+def test_chaoxing_catalog_falls_back_without_course_name() -> None:
+    lesson = Lesson(
+        id=1,
+        course_id=1,
+        planned_lesson_id=None,
+        week="1",
+        lesson_no="1",
+        hours="2",
+        lesson_code="0406",
+        title="分组查询",
+        content_summary="分组查询",
+        status="draft",
+    )
+
+    assert build_chaoxing_catalog(lesson) == "/0406-分组查询"
 
 
 @pytest.mark.anyio
@@ -1209,6 +1280,7 @@ async def test_lesson_draft_can_be_edited_and_saved(tmp_path: Path) -> None:
         await _create_first_lesson(client, session_factory, course)
         _create_reviewed_outline(session_factory)
         await client.post("/lessons/1/drafts/generate", follow_redirects=False)
+        await client.post("/lessons/1/drafts/generate/guide_mid", follow_redirects=False)
         with session_factory() as session:
             draft = session.scalar(select(LessonDraft).where(LessonDraft.draft_type == "guide_mid"))
             assert draft is not None
@@ -1248,8 +1320,8 @@ async def test_regenerating_lesson_drafts_upserts_current_drafts(tmp_path: Path)
         assert second_response.status_code == 303
         with session_factory() as session:
             drafts = session.scalars(select(LessonDraft)).all()
-            assert len(drafts) == 4
-            assert len({(draft.lesson_id, draft.draft_type) for draft in drafts}) == 4
+            assert len(drafts) == 2
+            assert len({(draft.lesson_id, draft.draft_type) for draft in drafts}) == 2
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
@@ -2306,6 +2378,8 @@ async def test_knowledge_outline_page_and_save_reviewed_content(
         assert "mock-ai-v0.2" in page_response.text
         assert "默认基于本课次下已添加资料生成" in page_response.text
         assert "/ai/settings?next=/lessons/1/knowledge-outline" in page_response.text
+        assert "前往课前学情与学生导学案" in page_response.text
+        assert "/lessons/1/drafts" in page_response.text
 
         save_response = await client.post(
             "/knowledge-outlines/1/save",

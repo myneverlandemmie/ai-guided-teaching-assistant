@@ -7,7 +7,10 @@
   <p>课次编码：{{ lesson.lesson_code or "未设置" }}</p>
   <p>提示：当前知识主干默认基于本课次下已添加资料生成。如果 PPT 覆盖多个课次或整章内容，建议只上传与本课次相关的页文本，或在生成后人工删改。AI 生成内容仅作为初稿，必须由教师复核后使用。</p>
   <p>真实 AI 生成需要先<a href="/ai/settings?next=/lessons/{{ lesson.id }}/knowledge-outline">设置当前会话 DeepSeek API Key</a>。API Key 不会保存到数据库，本系统不提供公共 Token；测试或显式开发模式才使用 Mock。</p>
-  <p><a href="/lessons/{{ lesson.id }}">返回课次详情</a></p>
+  <p>
+    <a href="/lessons/{{ lesson.id }}">返回课次详情</a>
+    ｜ <a href="/lessons/{{ lesson.id }}/drafts">前往课前学情与学生导学案</a>
+  </p>
 </section>
 
 {% if error_message %}

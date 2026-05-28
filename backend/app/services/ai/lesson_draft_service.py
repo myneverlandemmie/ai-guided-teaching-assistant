@@ -255,6 +255,20 @@ def generate_lesson_drafts(lesson: Lesson, outline: KnowledgeOutline) -> list[Ge
     ]
 
 
+def generate_basic_lesson_drafts(lesson: Lesson, outline: KnowledgeOutline) -> list[GeneratedLessonDraft]:
+    """默认生成前测和低阶导学案，符合先诊断再分层的教学流程。"""
+
+    return [_build_diagnostic_probe(lesson, outline), _build_guide(lesson, outline, "guide_low")]
+
+
+def generate_tiered_guide_draft(lesson: Lesson, outline: KnowledgeOutline, draft_type: str) -> GeneratedLessonDraft:
+    """按需生成中阶或高阶导学案草稿。"""
+
+    if draft_type not in {"guide_mid", "guide_high"}:
+        raise ValueError("仅支持生成中阶或高阶导学案")
+    return _build_guide(lesson, outline, draft_type)
+
+
 def parse_diagnostic_probe_questions(content: str) -> list[DiagnosticQuestion]:
     """从导学案前测 Markdown 中解析题目，供学习通模板导出使用。"""
 
@@ -308,13 +322,45 @@ def _correct_answer(question: DiagnosticQuestion) -> str:
     return question.answer
 
 
+def _catalog_segment(value: str | None) -> str:
+    """清理学习通题库目录片段，避免目录分隔符和换行破坏结构。"""
+
+    text = re.sub(r"\s+", " ", (value or "").strip())
+    text = text.replace("/", "-").replace("\\", "-")
+    return text.strip(" -")
+
+
+def _lesson_catalog_part(lesson: Lesson) -> str:
+    """生成课次目录片段，优先使用课次编码和标题。"""
+
+    code = _catalog_segment(lesson.lesson_code)
+    title = _catalog_segment(lesson.title or lesson.content_summary)
+    if code and title:
+        return f"{code}-{title}"
+    if code:
+        return code
+    if title:
+        return title
+    return f"lesson-{lesson.id}"
+
+
+def build_chaoxing_catalog(lesson: Lesson) -> str:
+    """生成学习通课程题库目录，不使用系统工具名作为一级目录。"""
+
+    lesson_part = _lesson_catalog_part(lesson)
+    course_title = _catalog_segment(lesson.course.title if lesson.course is not None else "")
+    if course_title:
+        return f"/{course_title}/{lesson_part}"
+    return f"/{lesson_part}"
+
+
 def build_chaoxing_rows(lesson: Lesson, draft: LessonDraft) -> list[list[str | int]]:
     """将 diagnostic_probe 草稿转换为学习通题库模板行。"""
 
     questions = parse_diagnostic_probe_questions(draft.content)
-    catalog_name = lesson.lesson_code or lesson.title
-    catalog = f"/智学导评/{catalog_name}"
-    tag = f"导学前测；学习起点诊断；{catalog_name}"
+    catalog = build_chaoxing_catalog(lesson)
+    tag_name = _lesson_catalog_part(lesson)
+    tag = f"导学前测；学习起点诊断；{tag_name}"
     rows: list[list[str | int]] = []
     for question in questions:
         options = question.options

@@ -36,7 +36,8 @@ from app.services.ai.deepseek_client import (
 from app.services.ai.sanitizer import sanitize_text_for_outline
 from app.services.ai.lesson_draft_service import (
     DRAFT_TYPE_LABELS,
-    generate_lesson_drafts,
+    generate_basic_lesson_drafts,
+    generate_tiered_guide_draft,
     write_chaoxing_template_xlsx,
 )
 from app.services.ai.session_key_store import (
@@ -228,6 +229,41 @@ def _get_lesson_drafts(db: Session, lesson_id: int) -> list[LessonDraft]:
         .where(LessonDraft.lesson_id == lesson_id)
         .order_by(LessonDraft.id)
     ).all()
+
+
+def _upsert_lesson_drafts(
+    db: Session,
+    lesson: Lesson,
+    outline: KnowledgeOutline,
+    generated_drafts: list[object],
+) -> None:
+    """按 lesson_id + draft_type 更新当前草稿，不保留历史版本。"""
+
+    existing_drafts = {
+        draft.draft_type: draft
+        for draft in db.scalars(select(LessonDraft).where(LessonDraft.lesson_id == lesson.id)).all()
+    }
+    for generated in generated_drafts:
+        if generated.draft_type not in LESSON_DRAFT_TYPES:
+            continue
+        draft = existing_drafts.get(generated.draft_type)
+        if draft is None:
+            draft = LessonDraft(
+                lesson_id=lesson.id,
+                source_outline_id=outline.id,
+                draft_type=generated.draft_type,
+                title=generated.title,
+                content=generated.content,
+                status="draft",
+                generated_by=generated.generated_by,
+            )
+            db.add(draft)
+        else:
+            draft.source_outline_id = outline.id
+            draft.title = generated.title
+            draft.content = generated.content
+            draft.status = "draft"
+            draft.generated_by = generated.generated_by
 
 
 def _safe_export_part(value: str | None, fallback: str) -> str:
@@ -819,6 +855,7 @@ async def show_lesson_drafts(
             "drafts": drafts,
             "draft_type_labels": DRAFT_TYPE_LABELS,
             "draft_status_labels": LESSON_DRAFT_STATUS_LABELS,
+            "has_low_guide": any(draft.draft_type == "guide_low" for draft in drafts),
             "chaoxing_export_url": f"/exports/chaoxing/{chaoxing_filename}" if chaoxing_filename else None,
             "error_message": None if outline else "请先生成并保存知识主干，再生成导学案前测与三阶导学案草稿。",
         },
@@ -830,7 +867,7 @@ async def generate_lesson_drafts_route(
     lesson_id: int,
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
-    """基于最新知识主干生成或更新四类导学草稿。"""
+    """默认生成或更新导学案前测与低阶导学案。"""
 
     lesson = db.get(Lesson, lesson_id)
     if lesson is None:
@@ -840,31 +877,37 @@ async def generate_lesson_drafts_route(
     if outline is None:
         return RedirectResponse(url=f"/lessons/{lesson.id}/drafts", status_code=303)
 
-    existing_drafts = {
-        draft.draft_type: draft
-        for draft in db.scalars(select(LessonDraft).where(LessonDraft.lesson_id == lesson.id)).all()
-    }
-    for generated in generate_lesson_drafts(lesson, outline):
-        if generated.draft_type not in LESSON_DRAFT_TYPES:
-            continue
-        draft = existing_drafts.get(generated.draft_type)
-        if draft is None:
-            draft = LessonDraft(
-                lesson_id=lesson.id,
-                source_outline_id=outline.id,
-                draft_type=generated.draft_type,
-                title=generated.title,
-                content=generated.content,
-                status="draft",
-                generated_by=generated.generated_by,
-            )
-            db.add(draft)
-        else:
-            draft.source_outline_id = outline.id
-            draft.title = generated.title
-            draft.content = generated.content
-            draft.status = "draft"
-            draft.generated_by = generated.generated_by
+    _upsert_lesson_drafts(db, lesson, outline, generate_basic_lesson_drafts(lesson, outline))
+    db.commit()
+    return RedirectResponse(url=f"/lessons/{lesson.id}/drafts", status_code=303)
+
+
+@app.post("/lessons/{lesson_id}/drafts/generate/{draft_type}")
+async def generate_tiered_lesson_draft_route(
+    lesson_id: int,
+    draft_type: str,
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    """按需生成或更新中阶 / 高阶导学案。"""
+
+    if draft_type not in {"guide_mid", "guide_high"}:
+        raise HTTPException(status_code=404, detail="导学草稿类型不存在")
+
+    lesson = db.get(Lesson, lesson_id)
+    if lesson is None:
+        raise HTTPException(status_code=404, detail="课次不存在")
+
+    outline = _get_latest_knowledge_outline(db, lesson.id)
+    if outline is None:
+        return RedirectResponse(url=f"/lessons/{lesson.id}/drafts", status_code=303)
+
+    guide_low = db.scalar(
+        select(LessonDraft).where(LessonDraft.lesson_id == lesson.id, LessonDraft.draft_type == "guide_low")
+    )
+    if guide_low is None:
+        return RedirectResponse(url=f"/lessons/{lesson.id}/drafts", status_code=303)
+
+    _upsert_lesson_drafts(db, lesson, outline, [generate_tiered_guide_draft(lesson, outline, draft_type)])
     db.commit()
     return RedirectResponse(url=f"/lessons/{lesson.id}/drafts", status_code=303)
 
