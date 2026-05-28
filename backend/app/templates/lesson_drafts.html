@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}导学案前测与三阶导学案{% endblock %}
+{% block content %}
+<h1>导学案前测与三阶导学案</h1>
+
+<section class="card">
+  <h2>{{ lesson.title }}</h2>
+  <p>周次：{{ lesson.week }} ｜ 课次：{{ lesson.lesson_no }} ｜ 学时：{{ lesson.hours }}</p>
+  <p>课次编码：{{ lesson.lesson_code or "未设置" }}</p>
+  <p><a href="/lessons/{{ lesson.id }}">返回课次详情</a> ｜ <a href="/lessons/{{ lesson.id }}/knowledge-outline">查看知识主干</a></p>
+</section>
+
+<section class="card">
+  <h2>使用说明</h2>
+  <p>以下内容为教师草稿，仅供审阅、修改、复制，不会自动发布给学生，不代表最终教学设计。AI 或规则生成内容必须经教师复核后使用。</p>
+  <p>导学案前测用于判断学习起点，不作为正式考试成绩；本系统不做学生答题、不做发布、不做统计、不对接学习通 API。</p>
+  <p>低阶导学案是默认基础版本；中阶 / 高阶导学案是可选分层版本。教师可先查看前测结果，再结合学情选择是否使用中阶或高阶导学案。</p>
+  {% if chaoxing_export_url %}
+    <p class="status">学习通题库模板已生成：<a href="{{ chaoxing_export_url }}">下载学习通题库模板</a></p>
+  {% endif %}
+  {% if error_message %}
+    <p class="error">{{ error_message }}</p>
+  {% endif %}
+  {% if outline %}
+    <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate">
+      <button type="submit">生成 / 更新导学草稿</button>
+    </form>
+  {% else %}
+    <p><a href="/lessons/{{ lesson.id }}/knowledge-outline">先生成并保存知识主干</a></p>
+  {% endif %}
+</section>
+
+{% if drafts %}
+  {% for draft in drafts %}
+    <section class="card">
+      <h2>{{ draft_type_labels.get(draft.draft_type, draft.draft_type) }}</h2>
+      <p>
+        状态：{{ draft_status_labels.get(draft.status, draft.status) }} ｜ 生成方式：本地结构化草稿{% if draft.source_outline_id %} ｜ 来源知识主干：{{ draft.source_outline_id }}{% endif %}
+      </p>
+      {% if draft.draft_type == "diagnostic_probe" %}
+        <form method="post" action="/lessons/{{ lesson.id }}/drafts/{{ draft.id }}/export-chaoxing">
+          <button type="submit">导出学习通题库模板</button>
+        </form>
+      {% elif draft.draft_type in ["guide_low", "guide_mid", "guide_high"] %}
+        <p><a href="/lessons/{{ lesson.id }}/drafts/{{ draft.id }}/download-md">下载 Markdown</a></p>
+      {% endif %}
+      <form method="post" action="/lessons/{{ lesson.id }}/drafts/{{ draft.id }}/save">
+        <p>
+          <label for="title-{{ draft.id }}">标题</label><br>
+          <input id="title-{{ draft.id }}" name="title" type="text" value="{{ draft.title }}" style="width:100%;">
+        </p>
+        <p>
+          <label for="content-{{ draft.id }}">草稿内容</label><br>
+          <textarea id="content-{{ draft.id }}" name="content" rows="24" style="width:100%; line-height:1.7;">{{ draft.content }}</textarea>
+        </p>
+        <button type="submit">保存教师修改</button>
+      </form>
+    </section>
+  {% endfor %}
+{% else %}
+  <section class="card">
+    <p>当前还没有导学草稿。请先生成知识主干，再点击“生成 / 更新导学草稿”。</p>
+  </section>
+{% endif %}
+{% endblock %}

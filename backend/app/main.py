@@ -23,6 +23,7 @@ from app.models.course import Course
 from app.models.course_plan import CoursePlanUpload, PlannedLesson
 from app.models.knowledge_outline import KnowledgeOutline
 from app.models.lesson import Lesson, LessonMaterial
+from app.models.lesson_draft import LESSON_DRAFT_TYPES, LessonDraft
 from app.services.course_plan.import_service import create_lessons_from_confirmed_planned_lessons, import_course_plan
 from app.services.ai import provider as ai_provider
 from app.services.ai.deepseek_client import DeepSeekProviderError
@@ -33,6 +34,11 @@ from app.services.ai.deepseek_client import (
     normalize_model_name,
 )
 from app.services.ai.sanitizer import sanitize_text_for_outline
+from app.services.ai.lesson_draft_service import (
+    DRAFT_TYPE_LABELS,
+    generate_lesson_drafts,
+    write_chaoxing_template_xlsx,
+)
 from app.services.ai.session_key_store import (
     SESSION_COOKIE_NAME,
     clear_session_api_key,
@@ -54,6 +60,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 COURSE_PLAN_UPLOAD_DIR = PROJECT_ROOT / "data" / "uploads" / "course-plans"
 LESSON_MATERIAL_UPLOAD_DIR = PROJECT_ROOT / "data" / "uploads" / "lesson-materials"
+CHAOXING_EXPORT_DIR = PROJECT_ROOT / "data" / "exports" / "chaoxing"
+GUIDE_EXPORT_DIR = PROJECT_ROOT / "data" / "exports" / "guides"
 MATERIAL_TYPE_LABELS = {
     "pasted_text": "粘贴文本",
     "lesson_plan": "教案（DOCX）",
@@ -66,6 +74,7 @@ MATERIAL_TYPE_LABELS = {
 }
 LESSON_STATUS_LABELS = {"draft": "草稿", "published": "已发布", "archived": "已归档"}
 KNOWLEDGE_OUTLINE_STATUS_LABELS = {"draft": "草稿", "reviewed": "已复核", "published": "已发布"}
+LESSON_DRAFT_STATUS_LABELS = {"draft": "草稿", "reviewed": "已复核"}
 DEFAULT_MATERIAL_TITLE_LABELS = {
     "pasted_text": "粘贴文本",
     "lesson_plan": "教案",
@@ -209,6 +218,34 @@ def _get_latest_knowledge_outline(db: Session, lesson_id: int) -> KnowledgeOutli
         .where(KnowledgeOutline.lesson_id == lesson_id)
         .order_by(KnowledgeOutline.id.desc())
     )
+
+
+def _get_lesson_drafts(db: Session, lesson_id: int) -> list[LessonDraft]:
+    """读取当前课次全部导学草稿。"""
+
+    return db.scalars(
+        select(LessonDraft)
+        .where(LessonDraft.lesson_id == lesson_id)
+        .order_by(LessonDraft.id)
+    ).all()
+
+
+def _safe_export_part(value: str | None, fallback: str) -> str:
+    """生成安全的导出文件名片段。"""
+
+    cleaned = "".join(char for char in (value or "") if char.isalnum() or char in {"-", "_"})
+    return cleaned or fallback
+
+
+def _safe_export_filename(filename: str | None, suffix: str) -> str | None:
+    """只允许下载固定导出目录下的简单文件名。"""
+
+    if not filename:
+        return None
+    basename = Path(filename).name
+    if basename != filename or "\\" in filename or not basename.endswith(suffix):
+        return None
+    return basename
 
 
 def get_or_create_demo_course(session: Session) -> Course:
@@ -755,6 +792,167 @@ async def show_lesson_knowledge_outline(
             "error_message": None,
             "ai_provider": ai_provider.get_ai_provider_name(),
         },
+    )
+
+
+@app.get("/lessons/{lesson_id}/drafts", response_class=HTMLResponse)
+async def show_lesson_drafts(
+    lesson_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """显示导学案前测与三阶导学案草稿。"""
+
+    lesson = db.get(Lesson, lesson_id)
+    if lesson is None:
+        raise HTTPException(status_code=404, detail="课次不存在")
+
+    outline = _get_latest_knowledge_outline(db, lesson.id)
+    drafts = _get_lesson_drafts(db, lesson.id)
+    chaoxing_filename = _safe_export_filename(request.query_params.get("chaoxing_file"), ".xlsx")
+    return templates.TemplateResponse(
+        request,
+        "lesson_drafts.html",
+        {
+            "lesson": lesson,
+            "outline": outline,
+            "drafts": drafts,
+            "draft_type_labels": DRAFT_TYPE_LABELS,
+            "draft_status_labels": LESSON_DRAFT_STATUS_LABELS,
+            "chaoxing_export_url": f"/exports/chaoxing/{chaoxing_filename}" if chaoxing_filename else None,
+            "error_message": None if outline else "请先生成并保存知识主干，再生成导学案前测与三阶导学案草稿。",
+        },
+    )
+
+
+@app.post("/lessons/{lesson_id}/drafts/generate")
+async def generate_lesson_drafts_route(
+    lesson_id: int,
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    """基于最新知识主干生成或更新四类导学草稿。"""
+
+    lesson = db.get(Lesson, lesson_id)
+    if lesson is None:
+        raise HTTPException(status_code=404, detail="课次不存在")
+
+    outline = _get_latest_knowledge_outline(db, lesson.id)
+    if outline is None:
+        return RedirectResponse(url=f"/lessons/{lesson.id}/drafts", status_code=303)
+
+    existing_drafts = {
+        draft.draft_type: draft
+        for draft in db.scalars(select(LessonDraft).where(LessonDraft.lesson_id == lesson.id)).all()
+    }
+    for generated in generate_lesson_drafts(lesson, outline):
+        if generated.draft_type not in LESSON_DRAFT_TYPES:
+            continue
+        draft = existing_drafts.get(generated.draft_type)
+        if draft is None:
+            draft = LessonDraft(
+                lesson_id=lesson.id,
+                source_outline_id=outline.id,
+                draft_type=generated.draft_type,
+                title=generated.title,
+                content=generated.content,
+                status="draft",
+                generated_by=generated.generated_by,
+            )
+            db.add(draft)
+        else:
+            draft.source_outline_id = outline.id
+            draft.title = generated.title
+            draft.content = generated.content
+            draft.status = "draft"
+            draft.generated_by = generated.generated_by
+    db.commit()
+    return RedirectResponse(url=f"/lessons/{lesson.id}/drafts", status_code=303)
+
+
+@app.post("/lessons/{lesson_id}/drafts/{draft_id}/save")
+async def save_lesson_draft(
+    lesson_id: int,
+    draft_id: int,
+    title: str = Form(...),
+    content: str = Form(...),
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    """保存教师编辑后的导学草稿。"""
+
+    draft = db.get(LessonDraft, draft_id)
+    if draft is None or draft.lesson_id != lesson_id:
+        raise HTTPException(status_code=404, detail="导学草稿不存在")
+
+    draft.title = title.strip() or draft.title
+    draft.content = content.strip()
+    draft.status = "reviewed"
+    db.commit()
+    return RedirectResponse(url=f"/lessons/{lesson_id}/drafts", status_code=303)
+
+
+@app.post("/lessons/{lesson_id}/drafts/{draft_id}/export-chaoxing")
+async def export_diagnostic_probe_to_chaoxing(
+    lesson_id: int,
+    draft_id: int,
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    """将导学案前测导出为学习通题库导入 xlsx。"""
+
+    lesson = db.get(Lesson, lesson_id)
+    draft = db.get(LessonDraft, draft_id)
+    if lesson is None or draft is None or draft.lesson_id != lesson_id:
+        raise HTTPException(status_code=404, detail="导学草稿不存在")
+    if draft.draft_type != "diagnostic_probe":
+        raise HTTPException(status_code=400, detail="只有导学案前测可以导出学习通题库模板")
+
+    CHAOXING_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    lesson_part = _safe_export_part(lesson.lesson_code, str(lesson.id))
+    filename = f"lesson_{lesson.id}_{lesson_part}_diagnostic_probe.xlsx"
+    output_path = CHAOXING_EXPORT_DIR / filename
+    write_chaoxing_template_xlsx(lesson, draft, output_path)
+    return RedirectResponse(url=f"/lessons/{lesson.id}/drafts?chaoxing_file={filename}", status_code=303)
+
+
+@app.get("/exports/chaoxing/{filename}")
+async def download_chaoxing_export(filename: str) -> Response:
+    """下载已生成的学习通题库导入文件。"""
+
+    safe_filename = _safe_export_filename(filename, ".xlsx")
+    if safe_filename is None:
+        raise HTTPException(status_code=404, detail="导出文件不存在")
+    file_path = CHAOXING_EXPORT_DIR / safe_filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="导出文件不存在")
+    return Response(
+        content=file_path.read_bytes(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
+    )
+
+
+@app.get("/lessons/{lesson_id}/drafts/{draft_id}/download-md")
+async def download_lesson_draft_markdown(
+    lesson_id: int,
+    draft_id: int,
+    db: Session = Depends(get_db),
+) -> Response:
+    """将当前导学案草稿保存并下载为 Markdown。"""
+
+    lesson = db.get(Lesson, lesson_id)
+    draft = db.get(LessonDraft, draft_id)
+    if lesson is None or draft is None or draft.lesson_id != lesson_id:
+        raise HTTPException(status_code=404, detail="导学草稿不存在")
+    if draft.draft_type not in {"guide_low", "guide_mid", "guide_high"}:
+        raise HTTPException(status_code=400, detail="只有导学案草稿可以下载 Markdown")
+
+    GUIDE_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    filename = f"lesson_{lesson.id}_{draft.draft_type}.md"
+    output_path = GUIDE_EXPORT_DIR / filename
+    output_path.write_text(draft.content, encoding="utf-8")
+    return Response(
+        content=draft.content,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

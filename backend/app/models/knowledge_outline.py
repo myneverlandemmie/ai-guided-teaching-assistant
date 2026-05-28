@@ -33,3 +33,4 @@ class KnowledgeOutline(Base):
     )
 
     lesson = relationship("Lesson", back_populates="knowledge_outlines")
+    lesson_drafts = relationship("LessonDraft", back_populates="source_outline")

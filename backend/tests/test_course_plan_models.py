@@ -61,7 +61,7 @@ def test_can_create_database_tables() -> None:
     create_database_tables(engine)
 
     table_names = set(inspect(engine).get_table_names())
-    assert {"courses", "course_plan_uploads", "planned_lessons", "lessons"}.issubset(table_names)
+    assert {"courses", "course_plan_uploads", "planned_lessons", "lessons", "lesson_drafts"}.issubset(table_names)
 
 
 def test_can_create_course() -> None:

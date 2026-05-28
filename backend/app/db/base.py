@@ -24,6 +24,6 @@ def create_database_tables(engine: Engine) -> None:
     """
 
     # 必须先导入模型模块，确保表定义已注册到 Base.metadata。
-    from app.models import course, course_plan, knowledge_outline, lesson  # noqa: F401
+    from app.models import course, course_plan, knowledge_outline, lesson, lesson_draft  # noqa: F401
 
     Base.metadata.create_all(bind=engine)

@@ -23,6 +23,7 @@
   {% endif %}
   <p>提示：当前知识主干默认基于本课次下已添加资料生成。如果 PPT 覆盖多个课次或整章内容，建议只上传与本课次相关的页文本，或在生成后人工删改。AI 生成内容仅作为初稿，必须由教师复核后使用。</p>
   <p>真实 AI 生成需要先在 <a href="/ai/settings?next=/lessons/{{ lesson.id }}">AI 设置</a> 中填写当前会话 DeepSeek API Key；Key 不会保存到数据库，本系统不提供公共 Token。</p>
+  <p><a href="/lessons/{{ lesson.id }}/drafts">导学案前测与三阶导学案</a></p>
   <p id="lesson-detail-outline-generation-hint" data-outline-generation-hint role="status" aria-live="polite" style="display:none; padding:.75rem 1rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; line-height:1.7;">
     正在调用 AI 生成知识主干。deepseek-v4-pro 生成可能需要几十秒；如服务繁忙，可能出现等待、排队、网络波动或超时。请勿重复点击、刷新页面或关闭窗口。生成失败时可稍后重试。生成内容为 AI 草稿，需教师审核、修改与确认。
   </p>

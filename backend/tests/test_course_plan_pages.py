@@ -5,6 +5,7 @@ import re
 import httpx
 import pytest
 from docx import Document
+from openpyxl import load_workbook
 from pptx import Presentation
 from sqlalchemy import String, Text, create_engine, inspect as sa_inspect, select, text
 from sqlalchemy.orm import Session, sessionmaker
@@ -15,6 +16,7 @@ from app.models.course import Course
 from app.models.course_plan import CoursePlanUpload, PlannedLesson
 from app.models.knowledge_outline import KnowledgeOutline
 from app.models.lesson import Lesson, LessonMaterial
+from app.models.lesson_draft import LessonDraft
 from app.services.ai import session_key_store
 from app.services.ai.deepseek_client import (
     DeepSeekConfig,
@@ -81,6 +83,8 @@ def _build_test_client(tmp_path: Path) -> tuple[httpx.AsyncClient, sessionmaker[
     main.app.dependency_overrides[main.get_db] = override_get_db
     main.COURSE_PLAN_UPLOAD_DIR = tmp_path / "course-plans"
     main.LESSON_MATERIAL_UPLOAD_DIR = tmp_path / "lesson-materials"
+    main.CHAOXING_EXPORT_DIR = tmp_path / "exports" / "chaoxing"
+    main.GUIDE_EXPORT_DIR = tmp_path / "exports" / "guides"
     transport = httpx.ASGITransport(app=main.app)
     return httpx.AsyncClient(transport=transport, base_url="http://testserver"), session_factory
 
@@ -327,6 +331,36 @@ async def _upload_sample_plan(
     )
     assert response.status_code == 303
     return response.headers["location"]
+
+
+async def _create_first_lesson(client: httpx.AsyncClient, session_factory: sessionmaker[Session], course: Course) -> None:
+    """通过授课计划确认流程创建一个正式课次。"""
+
+    await _upload_sample_plan(client, course)
+    with session_factory() as session:
+        selected_id = session.scalar(select(PlannedLesson.id).order_by(PlannedLesson.id))
+        assert selected_id is not None
+    response = await client.post(
+        "/course-plan-uploads/1/confirm",
+        data={"planned_lesson_ids": str(selected_id)},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+
+def _create_reviewed_outline(session_factory: sessionmaker[Session], lesson_id: int = 1) -> None:
+    """为导学草稿测试准备一条已复核知识主干。"""
+
+    with session_factory() as session:
+        outline = KnowledgeOutline(
+            lesson_id=lesson_id,
+            ai_raw_output="知识主干：核心概念、课堂任务、易错点和职业素养提示。",
+            edited_content="知识主干：核心概念、课堂任务、易错点和职业素养提示。学生需要完成基础操作并复盘错误。",
+            status="reviewed",
+            generated_by_model="test-model",
+        )
+        session.add(outline)
+        session.commit()
 
 
 @pytest.mark.anyio
@@ -1003,6 +1037,231 @@ async def test_lesson_detail_shows_knowledge_outline_entry(tmp_path: Path) -> No
         assert "超时" in response.text
         assert "请勿重复点击、刷新页面或关闭窗口" in response.text
         assert "生成失败时可稍后重试" in response.text
+        assert "导学案前测与三阶导学案" in response.text
+        assert "/lessons/1/drafts" in response.text
+        assert "/demo-grading/sql" not in response.text
+        assert "/demo-grading/python" not in response.text
+        assert "/demo-grading/c" not in response.text
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_lesson_drafts_page_requires_knowledge_outline(tmp_path: Path) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _create_first_lesson(client, session_factory, course)
+
+        response = await client.get("/lessons/1/drafts")
+
+        assert response.status_code == 200
+        assert "导学案前测与三阶导学案" in response.text
+        assert "请先生成并保存知识主干" in response.text
+        assert "本系统不做学生答题、不做发布、不做统计、不对接学习通 API" in response.text
+        with session_factory() as session:
+            assert session.scalars(select(LessonDraft)).all() == []
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_generate_lesson_drafts_creates_four_teacher_drafts(tmp_path: Path) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _create_first_lesson(client, session_factory, course)
+        _create_reviewed_outline(session_factory)
+
+        response = await client.post("/lessons/1/drafts/generate", follow_redirects=False)
+
+        assert response.status_code == 303
+        assert response.headers["location"] == "/lessons/1/drafts"
+        with session_factory() as session:
+            drafts = session.scalars(select(LessonDraft).order_by(LessonDraft.draft_type)).all()
+            assert len(drafts) == 4
+            assert {draft.draft_type for draft in drafts} == {
+                "diagnostic_probe",
+                "guide_low",
+                "guide_mid",
+                "guide_high",
+            }
+            assert {draft.status for draft in drafts} == {"draft"}
+            assert {draft.generated_by for draft in drafts} == {"rule_based"}
+
+            diagnostic = next(draft for draft in drafts if draft.draft_type == "diagnostic_probe")
+            for text_value in ["题目", "参考答案", "简短解析", "诊断点", "难度", "低复杂度", "中复杂度", "高复杂度"]:
+                assert text_value in diagnostic.content
+            assert "本前测用于判断学习起点，不作为正式考试成绩" in diagnostic.content
+
+            guide_contents = {draft.draft_type: draft.content for draft in drafts}
+            assert "低阶导学案" in guide_contents["guide_low"]
+            assert "中阶导学案" in guide_contents["guide_mid"]
+            assert "高阶导学案" in guide_contents["guide_high"]
+            four_char_headings = ["学习导航", "知识要点", "边学边填", "例题引路", "仿做练习", "重点速记", "带回小练", "学习记录"]
+            for content in [guide_contents["guide_low"], guide_contents["guide_mid"], guide_contents["guide_high"]]:
+                for heading in four_char_headings:
+                    assert heading in content
+                assert "AI 草稿声明" in content
+                assert "rule-based" not in content
+                assert "rule_based" not in content
+                assert "mock" not in content
+
+        page_response = await client.get("/lessons/1/drafts")
+        assert page_response.status_code == 200
+        assert "导学案前测" in page_response.text
+        assert "以下内容为教师草稿，仅供审阅、修改、复制，不会自动发布给学生" in page_response.text
+        assert "低阶导学案是默认基础版本" in page_response.text
+        assert "中阶 / 高阶导学案是可选分层版本" in page_response.text
+        assert "本地结构化草稿" in page_response.text
+        assert "rule_based" not in page_response.text
+        assert "rule-based" not in page_response.text
+        assert "mock" not in page_response.text
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_diagnostic_probe_exports_chaoxing_template(tmp_path: Path) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _create_first_lesson(client, session_factory, course)
+        _create_reviewed_outline(session_factory)
+        await client.post("/lessons/1/drafts/generate", follow_redirects=False)
+        with session_factory() as session:
+            draft = session.scalar(select(LessonDraft).where(LessonDraft.draft_type == "diagnostic_probe"))
+            assert draft is not None
+            draft_id = draft.id
+
+        export_response = await client.post(
+            f"/lessons/1/drafts/{draft_id}/export-chaoxing",
+            follow_redirects=False,
+        )
+
+        assert export_response.status_code == 303
+        assert "chaoxing_file=" in export_response.headers["location"]
+        export_files = list((tmp_path / "exports" / "chaoxing").glob("*.xlsx"))
+        assert len(export_files) == 1
+        workbook = load_workbook(export_files[0])
+        worksheet = workbook["课程题库"]
+        headers = [cell.value for cell in worksheet[1]]
+        for header in ["目录", "题目类型", "大题题干", "正确答案", "答案解析", "难易度", "知识点", "标签", "选项数", "选项A", "选项B"]:
+            assert header in headers
+        rows = list(worksheet.iter_rows(min_row=2, values_only=True))
+        assert len(rows) >= 5
+        question_types = {row[1] for row in rows}
+        assert {"单选题", "判断题", "填空题"}.issubset(question_types)
+        judgment_row = next(row for row in rows if row[1] == "判断题")
+        assert judgment_row[10] == 2
+        assert judgment_row[11] == "正确"
+        assert judgment_row[12] == "错误"
+
+        page_response = await client.get(export_response.headers["location"])
+        assert page_response.status_code == 200
+        assert "下载学习通题库模板" in page_response.text
+        assert "/exports/chaoxing/" in page_response.text
+        assert "学习通 API" in page_response.text
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_guide_low_can_download_markdown(tmp_path: Path) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _create_first_lesson(client, session_factory, course)
+        _create_reviewed_outline(session_factory)
+        await client.post("/lessons/1/drafts/generate", follow_redirects=False)
+        with session_factory() as session:
+            draft = session.scalar(select(LessonDraft).where(LessonDraft.draft_type == "guide_low"))
+            assert draft is not None
+            draft_id = draft.id
+            expected_content = draft.content
+
+        response = await client.get(f"/lessons/1/drafts/{draft_id}/download-md")
+
+        assert response.status_code == 200
+        assert "text/markdown" in response.headers["content-type"]
+        assert response.text == expected_content
+        assert "学习导航" in response.text
+        assert "rule-based" not in response.text
+        assert "rule_based" not in response.text
+        assert "mock" not in response.text
+        markdown_file = tmp_path / "exports" / "guides" / "lesson_1_guide_low.md"
+        assert markdown_file.exists()
+        assert markdown_file.read_text(encoding="utf-8") == expected_content
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_lesson_draft_can_be_edited_and_saved(tmp_path: Path) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _create_first_lesson(client, session_factory, course)
+        _create_reviewed_outline(session_factory)
+        await client.post("/lessons/1/drafts/generate", follow_redirects=False)
+        with session_factory() as session:
+            draft = session.scalar(select(LessonDraft).where(LessonDraft.draft_type == "guide_mid"))
+            assert draft is not None
+            draft_id = draft.id
+
+        response = await client.post(
+            f"/lessons/1/drafts/{draft_id}/save",
+            data={"title": "教师修改后的中阶导学案", "content": "教师已修改：保留关键提示并增加半开放任务。"},
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 303
+        assert response.headers["location"] == "/lessons/1/drafts"
+        with session_factory() as session:
+            saved = session.get(LessonDraft, draft_id)
+            assert saved is not None
+            assert saved.title == "教师修改后的中阶导学案"
+            assert saved.content == "教师已修改：保留关键提示并增加半开放任务。"
+            assert saved.status == "reviewed"
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_regenerating_lesson_drafts_upserts_current_drafts(tmp_path: Path) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _create_first_lesson(client, session_factory, course)
+        _create_reviewed_outline(session_factory)
+
+        first_response = await client.post("/lessons/1/drafts/generate", follow_redirects=False)
+        second_response = await client.post("/lessons/1/drafts/generate", follow_redirects=False)
+
+        assert first_response.status_code == 303
+        assert second_response.status_code == 303
+        with session_factory() as session:
+            drafts = session.scalars(select(LessonDraft)).all()
+            assert len(drafts) == 4
+            assert len({(draft.lesson_id, draft.draft_type) for draft in drafts}) == 4
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_no_sql_python_c_grading_demo_routes_added(tmp_path: Path) -> None:
+    client, _ = _build_test_client(tmp_path)
+    try:
+        for path in ["/demo-grading/sql", "/demo-grading/python", "/demo-grading/c"]:
+            response = await client.get(path)
+            assert response.status_code == 404
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()

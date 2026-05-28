@@ -34,6 +34,7 @@ class Lesson(Base):
     planned_lesson = relationship("PlannedLesson", back_populates="lesson")
     materials = relationship("LessonMaterial", back_populates="lesson", cascade="all, delete-orphan")
     knowledge_outlines = relationship("KnowledgeOutline", back_populates="lesson", cascade="all, delete-orphan")
+    drafts = relationship("LessonDraft", back_populates="lesson", cascade="all, delete-orphan")
 
 
 class LessonMaterial(Base):
