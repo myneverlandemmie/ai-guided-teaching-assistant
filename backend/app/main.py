@@ -34,10 +34,12 @@ from app.services.ai.deepseek_client import (
     normalize_model_name,
 )
 from app.services.ai.sanitizer import sanitize_text_for_outline
+from app.services.ai.lesson_draft_ai_service import (
+    generate_basic_lesson_drafts_with_ai,
+    generate_tiered_guide_draft_with_ai,
+)
 from app.services.ai.lesson_draft_service import (
     DRAFT_TYPE_LABELS,
-    generate_basic_lesson_drafts,
-    generate_tiered_guide_draft,
     write_chaoxing_template_xlsx,
 )
 from app.services.ai.session_key_store import (
@@ -832,6 +834,11 @@ async def show_lesson_drafts(
     outline = _get_latest_knowledge_outline(db, lesson.id)
     drafts = _get_lesson_drafts(db, lesson.id)
     chaoxing_filename = _safe_export_filename(request.query_params.get("chaoxing_file"), ".xlsx")
+    fallback_message = (
+        "AI 生成失败或当前未设置 API Key，已回退为本地结构化草稿。"
+        if request.query_params.get("draft_fallback") == "1"
+        else None
+    )
     return templates.TemplateResponse(
         request,
         "lesson_drafts.html",
@@ -844,6 +851,7 @@ async def show_lesson_drafts(
             "has_low_guide": any(draft.draft_type == "guide_low" for draft in drafts),
             "chaoxing_export_url": f"/exports/chaoxing/{chaoxing_filename}" if chaoxing_filename else None,
             "error_message": None if outline else "请先生成并保存知识主干，再生成课前学情测试与学生导学案草稿。",
+            "fallback_message": fallback_message,
         },
     )
 
@@ -851,6 +859,7 @@ async def show_lesson_drafts(
 @app.post("/lessons/{lesson_id}/drafts/generate")
 async def generate_lesson_drafts_route(
     lesson_id: int,
+    request: Request,
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
     """默认生成或更新课前学情测试与基础版导学案。"""
@@ -863,15 +872,25 @@ async def generate_lesson_drafts_route(
     if outline is None:
         return RedirectResponse(url=f"/lessons/{lesson.id}/drafts", status_code=303)
 
-    _upsert_lesson_drafts(db, lesson, outline, generate_basic_lesson_drafts(lesson, outline))
+    session_id = request.cookies.get(SESSION_COOKIE_NAME)
+    drafts, used_fallback = await run_in_threadpool(
+        generate_basic_lesson_drafts_with_ai,
+        lesson,
+        outline,
+        get_session_api_key(session_id),
+        get_session_selected_model(session_id) or get_default_deepseek_model(),
+    )
+    _upsert_lesson_drafts(db, lesson, outline, drafts)
     db.commit()
-    return RedirectResponse(url=f"/lessons/{lesson.id}/drafts", status_code=303)
+    suffix = "?draft_fallback=1" if used_fallback else ""
+    return RedirectResponse(url=f"/lessons/{lesson.id}/drafts{suffix}", status_code=303)
 
 
 @app.post("/lessons/{lesson_id}/drafts/generate/{draft_type}")
 async def generate_tiered_lesson_draft_route(
     lesson_id: int,
     draft_type: str,
+    request: Request,
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
     """按需生成或更新提升版 / 拓展版导学案。"""
@@ -893,9 +912,19 @@ async def generate_tiered_lesson_draft_route(
     if guide_low is None:
         return RedirectResponse(url=f"/lessons/{lesson.id}/drafts", status_code=303)
 
-    _upsert_lesson_drafts(db, lesson, outline, [generate_tiered_guide_draft(lesson, outline, draft_type)])
+    session_id = request.cookies.get(SESSION_COOKIE_NAME)
+    draft, used_fallback = await run_in_threadpool(
+        generate_tiered_guide_draft_with_ai,
+        lesson,
+        outline,
+        draft_type,
+        get_session_api_key(session_id),
+        get_session_selected_model(session_id) or get_default_deepseek_model(),
+    )
+    _upsert_lesson_drafts(db, lesson, outline, [draft])
     db.commit()
-    return RedirectResponse(url=f"/lessons/{lesson.id}/drafts", status_code=303)
+    suffix = "?draft_fallback=1" if used_fallback else ""
+    return RedirectResponse(url=f"/lessons/{lesson.id}/drafts{suffix}", status_code=303)
 
 
 @app.post("/lessons/{lesson_id}/drafts/{draft_id}/save")

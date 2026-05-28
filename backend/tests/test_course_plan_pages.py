@@ -1086,7 +1086,7 @@ async def test_default_lesson_draft_generation_creates_probe_and_low_guide(tmp_p
         response = await client.post("/lessons/1/drafts/generate", follow_redirects=False)
 
         assert response.status_code == 303
-        assert response.headers["location"] == "/lessons/1/drafts"
+        assert response.headers["location"] == "/lessons/1/drafts?draft_fallback=1"
         with session_factory() as session:
             drafts = session.scalars(select(LessonDraft).order_by(LessonDraft.draft_type)).all()
             assert len(drafts) == 2
@@ -1095,7 +1095,7 @@ async def test_default_lesson_draft_generation_creates_probe_and_low_guide(tmp_p
                 "guide_low",
             }
             assert {draft.status for draft in drafts} == {"draft"}
-            assert {draft.generated_by for draft in drafts} == {"rule_based"}
+            assert {draft.generated_by for draft in drafts} == {"local-structured-draft"}
 
             diagnostic = next(draft for draft in drafts if draft.draft_type == "diagnostic_probe")
             for text_value in ["题目", "参考答案", "简短解析", "诊断点", "难度", "基础版建议", "提升版建议", "拓展版建议"]:

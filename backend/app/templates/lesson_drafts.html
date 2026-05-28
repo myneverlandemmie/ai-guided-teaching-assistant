@@ -19,6 +19,9 @@
   {% if chaoxing_export_url %}
     <p class="status">学习通题库模板已生成：<a href="{{ chaoxing_export_url }}">下载学习通题库模板</a></p>
   {% endif %}
+  {% if fallback_message %}
+    <p class="status">{{ fallback_message }}</p>
+  {% endif %}
   {% if error_message %}
     <p class="error">{{ error_message }}</p>
   {% endif %}
@@ -51,7 +54,7 @@
     <section class="card">
       <h2>{{ draft_type_labels.get(draft.draft_type, draft.draft_type) }}</h2>
       <p>
-        状态：{{ draft_status_labels.get(draft.status, draft.status) }} ｜ 生成方式：本地结构化草稿{% if draft.source_outline_id %} ｜ 来源知识主干：{{ draft.source_outline_id }}{% endif %}
+        状态：{{ draft_status_labels.get(draft.status, draft.status) }} ｜ 生成方式：{% if draft.generated_by in ["rule_based", "local-structured-draft"] %}本地结构化草稿{% else %}AI 生成草稿（{{ draft.generated_by }}）{% endif %}{% if draft.source_outline_id %} ｜ 来源知识主干：{{ draft.source_outline_id }}{% endif %}
       </p>
       {% if draft.draft_type == "diagnostic_probe" %}
         <form method="post" action="/lessons/{{ lesson.id }}/drafts/{{ draft.id }}/export-chaoxing">
