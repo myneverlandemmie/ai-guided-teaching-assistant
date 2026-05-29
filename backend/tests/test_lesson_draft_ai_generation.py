@@ -58,7 +58,7 @@ def _ai_guide_content(label: str = "基础版导学案") -> str:
 ## 学习导航
 - 本课学习目标：理解分组查询。
 
-## 任务导入
+## 学习情境
 - 本课要解决统计口径问题。
 
 ## 知识要点
@@ -144,7 +144,20 @@ def test_lesson_drafts_fallback_when_api_raises(monkeypatch) -> None:
 
 def test_tiered_guide_uses_ai_model_or_fallback(monkeypatch) -> None:
     def fake_call(lesson, outline, draft_type, api_key, selected_model):
-        return _ai_guide_content("提升版导学案"), "deepseek-v4-pro"
+        return """# 0406-分组查询｜提升任务包草稿
+
+## 使用建议
+- 基础版导学案之后按需使用。
+
+## 适用对象
+- 已完成基础任务的学生。
+
+## 任务 1：变式练习
+- 学生要做什么：调整统计条件。
+
+## 教师调整提示
+- 需教师审核。
+""", "deepseek-v4-pro"
 
     monkeypatch.setattr("app.services.ai.lesson_draft_ai_service._call_deepseek_lesson_draft", fake_call)
 
@@ -158,7 +171,7 @@ def test_tiered_guide_uses_ai_model_or_fallback(monkeypatch) -> None:
 
     assert used_fallback is False
     assert draft.generated_by == "deepseek-v4-pro"
-    assert "提升版导学案" in draft.content
+    assert "提升任务包" in draft.content
 
 
 def test_lesson_draft_prompt_keeps_boundaries_and_versions() -> None:
@@ -167,9 +180,24 @@ def test_lesson_draft_prompt_keeps_boundaries_and_versions() -> None:
 
     assert "不生成完整教案" in full_prompt
     assert "不替教师决定教学目标" in full_prompt
-    assert "拓展版导学案" in prompt
-    assert "过程记录" in prompt
+    assert "拓展挑战包" in prompt
+    assert "不是完整导学案" in prompt
+    assert "挑战 1" in prompt
     assert "不做自动评分" in prompt
     assert "低阶" not in prompt
     assert "中阶" not in prompt
     assert "高阶" not in prompt
+
+
+def test_lesson_draft_prompt_direct_output_and_task_pack_boundaries() -> None:
+    low_prompt = build_lesson_draft_prompt(_lesson(), _outline(), "guide_low")
+    mid_prompt = build_lesson_draft_prompt(_lesson(), _outline(), "guide_mid")
+
+    assert "学习情境" in low_prompt
+    assert "任务导入" not in low_prompt
+    assert "直接输出正文" in low_prompt
+    assert "当然可以" in low_prompt
+    assert "以下是" in low_prompt
+    assert "提升任务包" in mid_prompt
+    assert "只生成 3—5 个提升任务" in mid_prompt
+    assert "不要重复完整导学案结构" in mid_prompt

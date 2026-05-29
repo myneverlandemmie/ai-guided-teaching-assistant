@@ -33,7 +33,7 @@ def _fallback_basic_drafts(lesson: Lesson, outline: KnowledgeOutline) -> list[Ge
 
 
 def _fallback_tiered_draft(lesson: Lesson, outline: KnowledgeOutline, draft_type: str) -> GeneratedLessonDraft:
-    """生成本地结构化提升版或拓展版导学案。"""
+    """生成本地结构化提升任务包或拓展挑战包。"""
 
     return _with_generated_by(generate_tiered_guide_draft(lesson, outline, draft_type), LOCAL_STRUCTURED_DRAFT)
 
@@ -45,7 +45,13 @@ def _is_usable_draft_content(draft_type: str, content: str) -> bool:
         return False
     if draft_type == "diagnostic_probe":
         return "### 题目" in content and "参考答案" in content and "诊断点" in content
-    required_headings = ["学习导航", "任务导入", "知识要点", "边学边填", "过程记录", "学习自评"]
+    if draft_type == "guide_mid":
+        required_headings = ["提升任务包", "使用建议", "适用对象", "任务 1", "教师调整提示"]
+        return all(heading in content for heading in required_headings)
+    if draft_type == "guide_high":
+        required_headings = ["拓展挑战包", "使用建议", "适用对象", "挑战 1", "教师调整提示"]
+        return all(heading in content for heading in required_headings)
+    required_headings = ["学习导航", "学习情境", "知识要点", "边学边填", "过程记录", "学习自评"]
     return all(heading in content for heading in required_headings)
 
 
@@ -135,7 +141,7 @@ def generate_tiered_guide_draft_with_ai(
     api_key: str | None,
     selected_model: str | None,
 ) -> tuple[GeneratedLessonDraft, bool]:
-    """生成提升版或拓展版导学案，有 Key 时优先调用 DeepSeek。"""
+    """生成提升任务包或拓展挑战包，有 Key 时优先调用 DeepSeek。"""
 
     local_draft = _fallback_tiered_draft(lesson, outline, draft_type)
     if not api_key:

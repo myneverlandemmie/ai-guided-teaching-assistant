@@ -27,8 +27,9 @@ def test_student_learning_guide_contains_process_record_and_self_assessment() ->
     drafts = generate_basic_lesson_drafts(lesson, outline)
     low_guide = next(draft for draft in drafts if draft.draft_type == "guide_low")
 
-    for heading in ["学习导航", "任务导入", "知识要点", "边学边填", "过程记录", "学习自评"]:
+    for heading in ["学习导航", "学习情境", "知识要点", "边学边填", "过程记录", "学习自评"]:
         assert heading in low_guide.content
+    assert "任务导入" not in low_guide.content
     assert "观察现象" in low_guide.content
     assert "错误信息" in low_guide.content
     assert "我能遵守安全 / 规范要求" in low_guide.content

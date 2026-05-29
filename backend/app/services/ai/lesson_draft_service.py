@@ -15,8 +15,8 @@ from app.models.lesson_draft import LessonDraft
 DRAFT_TYPE_LABELS = {
     "diagnostic_probe": "课前学情测试",
     "guide_low": "基础版导学案",
-    "guide_mid": "提升版导学案",
-    "guide_high": "拓展版导学案",
+    "guide_mid": "提升任务包",
+    "guide_high": "拓展挑战包",
 }
 CHAOXING_HEADERS = [
     "目录",
@@ -130,7 +130,7 @@ def _build_diagnostic_probe(lesson: Lesson, outline: KnowledgeOutline) -> Genera
 
 ### 题目 5
 - 题型：判断题
-- 题干：课前学情测试的结果可以帮助教师决定使用基础版、提升版或拓展版导学案。
+- 题干：课前学情测试的结果可以帮助教师决定是否在基础版主文档之外补充提升任务包或拓展挑战包。
 - 参考答案：正确
 - 简短解析：前测用于学习起点诊断，不是正式成绩记录。
 - 诊断点：分层导学理解
@@ -146,9 +146,9 @@ def _build_diagnostic_probe(lesson: Lesson, outline: KnowledgeOutline) -> Genera
 
 ## 导学案复杂度建议
 
-- 基础版建议：多数学生对核心术语、基本步骤或任务目标还不熟悉。
-- 提升版建议：多数学生能理解基本概念，但需要关键提示完成任务。
-- 拓展版建议：多数学生能独立完成基础任务，可增加迁移、排错和反思。
+- 基础版主文档建议：面向全班优先使用，尤其适合多数学生对核心术语、基本步骤或任务目标还不熟悉时。
+- 提升任务包建议：少数学生已完成基础任务后，可补充变式练习、错因分析或比较解释。
+- 拓展挑战包建议：学有余力学生可尝试迁移应用、开放问题或综合设计。
 
 ## 教师提示
 
@@ -165,24 +165,29 @@ def _build_guide(lesson: Lesson, outline: KnowledgeOutline, draft_type: str) -> 
     guide_settings = {
         "guide_low": (
             "基础版导学案",
-            "默认基础版本，步骤更细、示例更多、提示更充分，适合需要更多学习支撑的学生。",
+            "全班主文档，步骤更细、示例更多、提示更充分，建议优先生成并用于课堂。",
             "先按示例完成一个基础任务，再仿照完成一个同类小任务。",
             "1. 先读示例；2. 再补全步骤；3. 最后检查结果。",
         ),
         "guide_mid": (
-            "提升版导学案",
-            "可选扩展版本，适合已有一定基础、有独立完成能力的学生。",
+            "提升任务包",
+            "可选任务包，适合已完成基础任务、具备一定独立完成能力的学生。",
             "先完成基础任务，再根据提示调整条件、步骤或表达方式。",
             "保留关键节点提示，其余过程由学生独立补全。",
         ),
         "guide_high": (
-            "拓展版导学案",
-            "可选扩展版本，适合已完成基础任务、可进行迁移和排错的学生。",
+            "拓展挑战包",
+            "可选挑战包，适合兴趣小组、竞赛苗子或学有余力学生。",
             "完成迁移任务、错误排查和方法说明。",
             "仅保留任务目标，鼓励学生比较方案、解释原因并复盘错误。",
         ),
     }
     label, audience, task_style, hint_style = guide_settings[draft_type]
+    if draft_type == "guide_mid":
+        return _build_improvement_task_pack(lesson, outline, label, audience, task_style, hint_style)
+    if draft_type == "guide_high":
+        return _build_extension_challenge_pack(lesson, outline, label, audience, task_style, hint_style)
+
     content = f"""# {lesson_name}｜{label}草稿
 
 > 这是一份面向学生使用的导学案 / 学习单草稿，可用于填写、整理笔记和课堂练习。教师需审阅、修改与确认后再发给学生。
@@ -195,7 +200,7 @@ def _build_guide(lesson: Lesson, outline: KnowledgeOutline, draft_type: str) -> 
 - 本课完成后能做什么：完成一个与本课内容一致的基础练习，并能检查自己的结果。
 - 教师确认提示：请教师根据本班学情删改目标和任务要求。
 
-## 任务导入
+## 学习情境
 
 - 本课要解决什么问题：围绕“{lesson_name}”完成一个与课堂材料一致的学习任务。
 - 为什么要学：本课知识可帮助我更规范地理解概念、完成操作、核验结果或记录过程。
@@ -278,6 +283,127 @@ def _build_guide(lesson: Lesson, outline: KnowledgeOutline, draft_type: str) -> 
     return GeneratedLessonDraft(draft_type, f"{lesson_name}｜{label}", content)
 
 
+def _build_improvement_task_pack(
+    lesson: Lesson,
+    outline: KnowledgeOutline,
+    label: str,
+    audience: str,
+    task_style: str,
+    hint_style: str,
+) -> GeneratedLessonDraft:
+    """生成提升任务包：不是完整导学案，只作为基础版之后的可选任务。"""
+
+    lesson_name = _lesson_name(lesson)
+    excerpt = _outline_excerpt(outline, 360)
+    content = f"""# {lesson_name}｜{label}草稿
+
+> 本任务包不是完整导学案，建议在基础版导学案完成并经教师复核后按需使用。教师需审阅、修改与确认后再发给学生。
+
+## 使用建议
+
+- 定位：基础版主文档之后的可选补充任务。
+- 适用对象：{audience}
+- 使用方式：不建议每节课默认生成或全部使用，可结合课前学情测试和课堂表现选择 1—3 个任务。
+- 依据摘要：{excerpt or "暂无知识主干摘要，需教师补充。"}
+
+## 适用对象
+
+- 已完成基础任务的学生；
+- 能说出本课关键概念，但需要进一步解释、比较或排错的学生；
+- 适合小组讨论、课堂加练或教师点拨后的巩固。
+
+## 任务 1：变式练习
+
+- 学生要做什么：在基础任务上轻微改变条件、材料或步骤，完成一个同类任务。
+- 思考提示：哪些条件变了？哪些步骤保持不变？
+- 教师可调整点：可替换为本课材料中的真实任务或课堂练习。
+
+## 任务 2：错因分析
+
+- 学生要做什么：阅读一个可能出错的过程或结果，指出错误原因并写出修正方法。
+- 思考提示：先找条件、步骤、结果核验或规范记录中的问题。
+- 教师可调整点：建议使用本班学生常见错误，不写学生姓名。
+
+## 任务 3：比较解释
+
+- 学生要做什么：比较两种做法、表达或操作结果，说明哪一种更符合本课要求。
+- 思考提示：从准确性、规范性、可检查性三个角度说明理由。
+- 教师可调整点：根据课程类型替换为代码、查询、接线、实验记录或术语表达。
+
+## 任务 4：小组讨论或排错
+
+- 学生要做什么：小组讨论一个不确定结果，记录排查过程和最终判断。
+- 思考提示：{hint_style}
+- 教师可调整点：如课堂时间有限，可只保留口头讨论或记录关键步骤。
+
+## 教师调整提示
+
+- 本任务包仅作可选补充，不替代基础版导学案。
+- 教师应结合学生基础、课堂时间和设备条件选择使用。
+- 以上内容为本地结构化或 AI 草稿，需教师审核、修改与确认。
+"""
+    return GeneratedLessonDraft("guide_mid", f"{lesson_name}｜{label}", content)
+
+
+def _build_extension_challenge_pack(
+    lesson: Lesson,
+    outline: KnowledgeOutline,
+    label: str,
+    audience: str,
+    task_style: str,
+    hint_style: str,
+) -> GeneratedLessonDraft:
+    """生成拓展挑战包：只提供少量挑战任务，不重复完整导学案。"""
+
+    lesson_name = _lesson_name(lesson)
+    excerpt = _outline_excerpt(outline, 360)
+    content = f"""# {lesson_name}｜{label}草稿
+
+> 本挑战包不是完整导学案，适合作为兴趣小组、竞赛苗子或学有余力学生的可选拓展。教师需审阅、修改与确认后再发给学生。
+
+## 使用建议
+
+- 定位：基础版主文档和必要提升任务之后的可选挑战。
+- 适用对象：{audience}
+- 使用方式：建议只选择 1—2 个挑战，不鼓励每节课默认使用，避免增加不必要负担。
+- 依据摘要：{excerpt or "暂无知识主干摘要，需教师补充。"}
+
+## 适用对象
+
+- 已较快完成基础任务的学生；
+- 愿意尝试迁移、排错、方案设计或综合表达的学生；
+- 可用于小组探究、课堂展示或课后自选挑战。
+
+## 挑战 1：迁移应用
+
+- 问题情境：把本课核心方法迁移到一个相近但条件略有变化的任务中。
+- 完成要求：说明迁移前后哪些条件相同、哪些条件变化，以及如何检查结果。
+- 可选提示：先写出基础任务的关键步骤，再逐项修改。
+- 教师可调整点：可替换为本课程真实项目、设备、数据或语料。
+
+## 挑战 2：开放问题
+
+- 问题情境：围绕“{lesson_name}”提出一个需要解释、比较或选择方案的问题。
+- 完成要求：给出自己的方案，并说明依据、风险或需要教师确认的地方。
+- 可选提示：不确定的技术细节应标注“需教师确认”。
+- 教师可调整点：根据课堂时间决定是否要求书面提交。
+
+## 挑战 3：综合设计或竞赛启发
+
+- 问题情境：设计一个小任务，把本课知识与过程记录、规范意识或结果核验结合起来。
+- 完成要求：写出任务目标、关键步骤、检查方法和可能错误。
+- 可选提示：{task_style}
+- 教师可调整点：如本节课不适合综合设计，可改为排错或复盘任务。
+
+## 教师调整提示
+
+- 本挑战包只作可选拓展，不作为全班统一要求。
+- 教师应避免让拓展任务替代基础任务。
+- 以上内容为本地结构化或 AI 草稿，需教师审核、修改与确认。
+"""
+    return GeneratedLessonDraft("guide_high", f"{lesson_name}｜{label}", content)
+
+
 def generate_lesson_drafts(lesson: Lesson, outline: KnowledgeOutline) -> list[GeneratedLessonDraft]:
     """基于最新知识主干生成四类教师草稿，不调用真实 AI。"""
 
@@ -296,10 +422,10 @@ def generate_basic_lesson_drafts(lesson: Lesson, outline: KnowledgeOutline) -> l
 
 
 def generate_tiered_guide_draft(lesson: Lesson, outline: KnowledgeOutline, draft_type: str) -> GeneratedLessonDraft:
-    """按需生成提升版或拓展版导学案草稿。"""
+    """按需生成提升任务包或拓展挑战包草稿。"""
 
     if draft_type not in {"guide_mid", "guide_high"}:
-        raise ValueError("仅支持生成提升版或拓展版导学案")
+        raise ValueError("仅支持生成提升任务包或拓展挑战包")
     return _build_guide(lesson, outline, draft_type)
 
 
@@ -307,19 +433,40 @@ def parse_diagnostic_probe_questions(content: str) -> list[DiagnosticQuestion]:
     """从课前学情测试 Markdown 中解析题目，供学习通模板导出使用。"""
 
     questions: list[DiagnosticQuestion] = []
-    blocks = re.split(r"(?m)^###\s*题目\s*\d+\s*$", content)
-    for block in blocks[1:]:
+    question_pattern = re.compile(
+        r"(?m)^[ \t]*(?:#{2,4}[ \t]*)?(?:\*\*)?[ \t]*(?:题目|第)[ \t]*(\d+)[ \t]*(?:题)?(?:[：:.\、-].*)?[ \t]*(?:\*\*)?[ \t]*$"
+    )
+    matches = list(question_pattern.finditer(content))
+    blocks: list[tuple[str, str]] = []
+    for index, matched in enumerate(matches):
+        start = matched.end()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(content)
+        blocks.append((matched.group(0), content[start:end]))
+
+    # 兼容旧的严格格式，避免历史草稿无法导出。
+    if not blocks:
+        strict_blocks = re.split(r"(?m)^###\s*题目\s*\d+\s*$", content)
+        blocks = [("", block) for block in strict_blocks[1:]]
+
+    for heading, block in blocks:
         data: dict[str, str] = {}
+        option_lines: list[str] = []
         for line in block.splitlines():
-            matched = re.match(r"^-\s*([^：:]+)[：:]\s*(.*)$", line.strip())
+            stripped = line.strip().strip("*")
+            matched = re.match(r"^(?:[-*]\s*)?([^：:]{1,12})[：:]\s*(.*)$", stripped)
             if matched:
-                data[matched.group(1).strip()] = matched.group(2).strip()
+                key = _normalize_question_field(matched.group(1).strip())
+                data[key] = matched.group(2).strip()
+                continue
+            if re.match(r"^[A-H][.．、]\s*.+", stripped):
+                option_lines.append(stripped)
+
         question_type = data.get("题型", "")
-        prompt = data.get("题干", "")
+        prompt = data.get("题干", "") or _prompt_from_question_heading(heading)
         answer = data.get("参考答案", "")
         if not question_type or not prompt:
             continue
-        options = _parse_options(data.get("选项", ""))
+        options = _parse_options(data.get("选项", "") or "；".join(option_lines))
         questions.append(
             DiagnosticQuestion(
                 question_type=question_type,
@@ -332,6 +479,39 @@ def parse_diagnostic_probe_questions(content: str) -> list[DiagnosticQuestion]:
             )
         )
     return questions
+
+
+def _normalize_question_field(field_name: str) -> str:
+    """归一化 AI 常见字段名，提升学习通导出兼容性。"""
+
+    mapping = {
+        "类型": "题型",
+        "题目类型": "题型",
+        "题干": "题干",
+        "题目": "题干",
+        "问题": "题干",
+        "选项": "选项",
+        "答案": "参考答案",
+        "正确答案": "参考答案",
+        "参考答案": "参考答案",
+        "解析": "简短解析",
+        "答案解析": "简短解析",
+        "简短解析": "简短解析",
+        "诊断点": "诊断点",
+        "知识点": "诊断点",
+        "能力点": "诊断点",
+        "对应知识点": "诊断点",
+        "难度": "难度",
+    }
+    return mapping.get(field_name, field_name)
+
+
+def _prompt_from_question_heading(heading: str) -> str:
+    """当 AI 把题干写在标题行时，从标题中提取题干。"""
+
+    text = re.sub(r"^\s*#{2,4}\s*", "", heading).strip().strip("*")
+    text = re.sub(r"^(?:题目|第)\s*\d+\s*(?:题)?\s*[：:.\、\s-]*", "", text).strip()
+    return text
 
 
 def _parse_options(options_text: str) -> list[str]:

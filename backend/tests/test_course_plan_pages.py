@@ -1098,7 +1098,16 @@ async def test_default_lesson_draft_generation_creates_probe_and_low_guide(tmp_p
             assert {draft.generated_by for draft in drafts} == {"local-structured-draft"}
 
             diagnostic = next(draft for draft in drafts if draft.draft_type == "diagnostic_probe")
-            for text_value in ["题目", "参考答案", "简短解析", "诊断点", "难度", "基础版建议", "提升版建议", "拓展版建议"]:
+            for text_value in [
+                "题目",
+                "参考答案",
+                "简短解析",
+                "诊断点",
+                "难度",
+                "基础版主文档建议",
+                "提升任务包建议",
+                "拓展挑战包建议",
+            ]:
                 assert text_value in diagnostic.content
             assert "本前测用于判断学习起点，不作为正式考试成绩" in diagnostic.content
 
@@ -1106,7 +1115,7 @@ async def test_default_lesson_draft_generation_creates_probe_and_low_guide(tmp_p
             assert "基础版导学案" in guide_contents["guide_low"]
             four_char_headings = [
                 "学习导航",
-                "任务导入",
+                "学习情境",
                 "知识要点",
                 "边学边填",
                 "例题引路",
@@ -1130,11 +1139,13 @@ async def test_default_lesson_draft_generation_creates_probe_and_low_guide(tmp_p
         assert "课前学情测试" in page_response.text
         assert "课前学情与学生导学案" in page_response.text
         assert "以下内容为教师草稿，仅供审阅、修改、复制，不会自动发布给学生" in page_response.text
-        assert "基础版导学案是默认基础版本" in page_response.text
-        assert "提升版 / 拓展版导学案是可选扩展版本" in page_response.text
+        assert "基础版导学案是面向全班的主文档" in page_response.text
+        assert "提升任务包、拓展挑战包是可选补充" in page_response.text
         assert "生成前测与基础版导学案" in page_response.text
-        assert "生成提升版导学案" in page_response.text
-        assert "生成拓展版导学案" in page_response.text
+        assert "生成提升任务包" in page_response.text
+        assert "生成拓展挑战包" in page_response.text
+        assert "AI 正在生成，请稍候" in page_response.text
+        assert "请勿重复点击" in page_response.text
         assert "本地结构化草稿" in page_response.text
         assert "rule_based" not in page_response.text
         assert "rule-based" not in page_response.text
@@ -1165,10 +1176,12 @@ async def test_can_generate_mid_and_high_guides_after_low_guide_exists(tmp_path:
             assert draft_types == {"diagnostic_probe", "guide_low", "guide_mid", "guide_high"}
             guide_mid = next(draft for draft in drafts if draft.draft_type == "guide_mid")
             guide_high = next(draft for draft in drafts if draft.draft_type == "guide_high")
-            assert "提升版导学案" in guide_mid.content
-            assert "拓展版导学案" in guide_high.content
-            assert "学习导航" in guide_mid.content
-            assert "学习导航" in guide_high.content
+            assert "提升任务包" in guide_mid.content
+            assert "拓展挑战包" in guide_high.content
+            assert "学习导航" not in guide_mid.content
+            assert "学习导航" not in guide_high.content
+            assert "不是完整导学案" in guide_mid.content
+            assert "不是完整导学案" in guide_high.content
 
             for draft in [guide_mid, guide_high]:
                 download_response = await client.get(f"/lessons/1/drafts/{draft.id}/download-md")
@@ -1300,7 +1313,7 @@ async def test_lesson_draft_can_be_edited_and_saved(tmp_path: Path) -> None:
 
         response = await client.post(
             f"/lessons/1/drafts/{draft_id}/save",
-            data={"title": "教师修改后的提升版导学案", "content": "教师已修改：保留关键提示并增加半开放任务。"},
+            data={"title": "教师修改后的提升任务包", "content": "教师已修改：保留关键提示并增加半开放任务。"},
             follow_redirects=False,
         )
 
@@ -1309,7 +1322,7 @@ async def test_lesson_draft_can_be_edited_and_saved(tmp_path: Path) -> None:
         with session_factory() as session:
             saved = session.get(LessonDraft, draft_id)
             assert saved is not None
-            assert saved.title == "教师修改后的提升版导学案"
+            assert saved.title == "教师修改后的提升任务包"
             assert saved.content == "教师已修改：保留关键提示并增加半开放任务。"
             assert saved.status == "reviewed"
     finally:

@@ -14,8 +14,9 @@
   <h2>使用说明</h2>
   <p>以下内容为教师草稿，仅供审阅、修改、复制，不会自动发布给学生，不代表最终教学设计。AI 或规则生成内容必须经教师审核、修改和确认。</p>
   <p>课前学情测试用于判断学习起点，不作为正式考试成绩；本系统不做学生答题、不做发布、不做统计、不对接学习通 API。</p>
-  <p>基础版导学案是默认基础版本；提升版 / 拓展版导学案是可选扩展版本。教师应结合前测结果选择使用。</p>
+  <p>基础版导学案是面向全班的主文档，建议优先生成并用于课堂；提升任务包、拓展挑战包是可选补充，教师应结合前测结果按需使用。</p>
   <p>导学案采用学生学习单风格，供学生填写、记录学习过程、整理笔记和课后复盘。</p>
+  <p>生成过程中请勿重复点击，完成后可继续编辑、导出或下载。</p>
   {% if chaoxing_export_url %}
     <p class="status">学习通题库模板已生成：<a href="{{ chaoxing_export_url }}">下载学习通题库模板</a></p>
   {% endif %}
@@ -26,8 +27,14 @@
     <p class="error">{{ error_message }}</p>
   {% endif %}
   {% if outline %}
-    <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate">
-      <button type="submit">生成前测与基础版导学案</button>
+    <p id="lesson-drafts-generation-hint" data-lesson-drafts-generation-hint role="status" aria-live="polite" style="display:none; padding:.75rem 1rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; line-height:1.7;">
+      AI 正在生成，请稍候……如使用真实 API，可能需要几十秒；如服务繁忙，可能出现等待、网络波动或超时。请勿重复点击、刷新页面或关闭窗口。生成内容为草稿，需教师审核、修改与确认。
+    </p>
+    <noscript>
+      <p class="error">浏览器未启用 JavaScript。提交后请耐心等待生成完成，不要重复点击或刷新页面。</p>
+    </noscript>
+    <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate" data-draft-generation-form data-loading-target="lesson-drafts-generation-hint" onsubmit="return handleLessonDraftGenerationSubmit(this);">
+      <button type="submit" data-draft-generation-button>生成前测与基础版导学案</button>
     </form>
   {% else %}
     <p><a href="/lessons/{{ lesson.id }}/knowledge-outline">先生成并保存知识主干</a></p>
@@ -38,12 +45,13 @@
   {% if has_low_guide %}
     <section class="card">
       <h2>可选扩展生成</h2>
-      <p>建议教师先复核基础版导学案，再根据前测学情选择是否生成提升版或拓展版导学案。</p>
-      <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_mid" style="display:inline-block; margin-right:.75rem;">
-        <button type="submit">生成提升版导学案</button>
+      <p>基础版导学案为全班主文档。建议教师先复核基础版，再根据前测学情按需生成提升任务包或拓展挑战包；不鼓励每节课默认生成所有任务包，避免不必要 API 消耗。</p>
+      <p>提升任务包适合已完成基础任务的学生；拓展挑战包适合兴趣小组或学有余力学生。</p>
+      <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_mid" data-draft-generation-form data-loading-target="lesson-drafts-generation-hint" style="display:inline-block; margin-right:.75rem;" onsubmit="return handleLessonDraftGenerationSubmit(this);">
+        <button type="submit" data-draft-generation-button>生成提升任务包</button>
       </form>
-      <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_high" style="display:inline-block;">
-        <button type="submit">生成拓展版导学案</button>
+      <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_high" data-draft-generation-form data-loading-target="lesson-drafts-generation-hint" style="display:inline-block;" onsubmit="return handleLessonDraftGenerationSubmit(this);">
+        <button type="submit" data-draft-generation-button>生成拓展挑战包</button>
       </form>
     </section>
   {% endif %}
@@ -81,4 +89,20 @@
     <p>当前还没有导学草稿。请先生成知识主干，再点击“生成 / 更新导学草稿”。</p>
   </section>
 {% endif %}
+<script>
+  function handleLessonDraftGenerationSubmit(form) {
+    const hintId = form.getAttribute('data-loading-target');
+    const hint = hintId ? document.getElementById(hintId) : null;
+    const buttons = document.querySelectorAll('[data-draft-generation-button]');
+
+    if (hint) {
+      hint.style.display = 'block';
+    }
+    buttons.forEach((button) => {
+      button.disabled = true;
+      button.textContent = 'AI 正在生成，请稍候...';
+    });
+    return true;
+  }
+</script>
 {% endblock %}
