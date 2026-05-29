@@ -421,6 +421,16 @@ def generate_basic_lesson_drafts(lesson: Lesson, outline: KnowledgeOutline) -> l
     return [_build_diagnostic_probe(lesson, outline), _build_guide(lesson, outline, "guide_low")]
 
 
+def generate_single_lesson_draft(lesson: Lesson, outline: KnowledgeOutline, draft_type: str) -> GeneratedLessonDraft:
+    """只生成指定 draft_type 的本地结构化草稿，不连带补齐其他草稿。"""
+
+    if draft_type == "diagnostic_probe":
+        return _build_diagnostic_probe(lesson, outline)
+    if draft_type in {"guide_low", "guide_mid", "guide_high"}:
+        return _build_guide(lesson, outline, draft_type)
+    raise ValueError("不支持的导学草稿类型")
+
+
 def generate_tiered_guide_draft(lesson: Lesson, outline: KnowledgeOutline, draft_type: str) -> GeneratedLessonDraft:
     """按需生成提升任务包或拓展挑战包草稿。"""
 

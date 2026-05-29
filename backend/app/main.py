@@ -35,8 +35,7 @@ from app.services.ai.deepseek_client import (
 )
 from app.services.ai.sanitizer import sanitize_text_for_outline
 from app.services.ai.lesson_draft_ai_service import (
-    generate_basic_lesson_drafts_with_ai,
-    generate_tiered_guide_draft_with_ai,
+    generate_single_lesson_draft_with_ai,
 )
 from app.services.ai.lesson_draft_service import (
     DRAFT_TYPE_LABELS,
@@ -862,7 +861,7 @@ async def generate_lesson_drafts_route(
     request: Request,
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
-    """默认生成或更新课前学情测试与基础版导学案。"""
+    """兼容旧入口：只生成或更新课前学情测试，不连带生成导学案。"""
 
     lesson = db.get(Lesson, lesson_id)
     if lesson is None:
@@ -873,14 +872,15 @@ async def generate_lesson_drafts_route(
         return RedirectResponse(url=f"/lessons/{lesson.id}/drafts", status_code=303)
 
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
-    drafts, used_fallback = await run_in_threadpool(
-        generate_basic_lesson_drafts_with_ai,
+    draft, used_fallback = await run_in_threadpool(
+        generate_single_lesson_draft_with_ai,
         lesson,
         outline,
+        "diagnostic_probe",
         get_session_api_key(session_id),
         get_session_selected_model(session_id) or get_default_deepseek_model(),
     )
-    _upsert_lesson_drafts(db, lesson, outline, drafts)
+    _upsert_lesson_drafts(db, lesson, outline, [draft])
     db.commit()
     suffix = "?draft_fallback=1" if used_fallback else ""
     return RedirectResponse(url=f"/lessons/{lesson.id}/drafts{suffix}", status_code=303)
@@ -893,9 +893,9 @@ async def generate_tiered_lesson_draft_route(
     request: Request,
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
-    """按需生成或更新提升版 / 拓展版导学案。"""
+    """按需生成或更新单个导学草稿。"""
 
-    if draft_type not in {"guide_mid", "guide_high"}:
+    if draft_type not in LESSON_DRAFT_TYPES:
         raise HTTPException(status_code=404, detail="导学草稿类型不存在")
 
     lesson = db.get(Lesson, lesson_id)
@@ -906,15 +906,14 @@ async def generate_tiered_lesson_draft_route(
     if outline is None:
         return RedirectResponse(url=f"/lessons/{lesson.id}/drafts", status_code=303)
 
-    guide_low = db.scalar(
+    if draft_type in {"guide_mid", "guide_high"} and db.scalar(
         select(LessonDraft).where(LessonDraft.lesson_id == lesson.id, LessonDraft.draft_type == "guide_low")
-    )
-    if guide_low is None:
+    ) is None:
         return RedirectResponse(url=f"/lessons/{lesson.id}/drafts", status_code=303)
 
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
     draft, used_fallback = await run_in_threadpool(
-        generate_tiered_guide_draft_with_ai,
+        generate_single_lesson_draft_with_ai,
         lesson,
         outline,
         draft_type,

@@ -1083,8 +1083,10 @@ async def test_default_lesson_draft_generation_creates_probe_and_low_guide(tmp_p
         await _create_first_lesson(client, session_factory, course)
         _create_reviewed_outline(session_factory)
 
-        response = await client.post("/lessons/1/drafts/generate", follow_redirects=False)
+        diagnostic_response = await client.post("/lessons/1/drafts/generate/diagnostic_probe", follow_redirects=False)
+        response = await client.post("/lessons/1/drafts/generate/guide_low", follow_redirects=False)
 
+        assert diagnostic_response.status_code == 303
         assert response.status_code == 303
         assert response.headers["location"] == "/lessons/1/drafts?draft_fallback=1"
         with session_factory() as session:
@@ -1141,7 +1143,8 @@ async def test_default_lesson_draft_generation_creates_probe_and_low_guide(tmp_p
         assert "以下内容为教师草稿，仅供审阅、修改、复制，不会自动发布给学生" in page_response.text
         assert "基础版导学案是面向全班的主文档" in page_response.text
         assert "提升任务包、拓展挑战包是可选补充" in page_response.text
-        assert "生成前测与基础版导学案" in page_response.text
+        assert "生成课前学情测试" in page_response.text
+        assert "生成基础版导学案" in page_response.text
         assert "生成提升任务包" in page_response.text
         assert "生成拓展挑战包" in page_response.text
         assert "AI 正在生成，请稍候" in page_response.text
@@ -1162,7 +1165,8 @@ async def test_can_generate_mid_and_high_guides_after_low_guide_exists(tmp_path:
     try:
         await _create_first_lesson(client, session_factory, course)
         _create_reviewed_outline(session_factory)
-        await client.post("/lessons/1/drafts/generate", follow_redirects=False)
+        await client.post("/lessons/1/drafts/generate/diagnostic_probe", follow_redirects=False)
+        await client.post("/lessons/1/drafts/generate/guide_low", follow_redirects=False)
 
         mid_response = await client.post("/lessons/1/drafts/generate/guide_mid", follow_redirects=False)
         high_response = await client.post("/lessons/1/drafts/generate/guide_high", follow_redirects=False)
@@ -1199,7 +1203,7 @@ async def test_diagnostic_probe_exports_chaoxing_template(tmp_path: Path) -> Non
     try:
         await _create_first_lesson(client, session_factory, course)
         _create_reviewed_outline(session_factory)
-        await client.post("/lessons/1/drafts/generate", follow_redirects=False)
+        await client.post("/lessons/1/drafts/generate/diagnostic_probe", follow_redirects=False)
         with session_factory() as session:
             saved_course = session.get(Course, course.id)
             lesson = session.get(Lesson, 1)
@@ -1273,7 +1277,7 @@ async def test_guide_low_can_download_markdown(tmp_path: Path) -> None:
     try:
         await _create_first_lesson(client, session_factory, course)
         _create_reviewed_outline(session_factory)
-        await client.post("/lessons/1/drafts/generate", follow_redirects=False)
+        await client.post("/lessons/1/drafts/generate/guide_low", follow_redirects=False)
         with session_factory() as session:
             draft = session.scalar(select(LessonDraft).where(LessonDraft.draft_type == "guide_low"))
             assert draft is not None
@@ -1304,7 +1308,7 @@ async def test_lesson_draft_can_be_edited_and_saved(tmp_path: Path) -> None:
     try:
         await _create_first_lesson(client, session_factory, course)
         _create_reviewed_outline(session_factory)
-        await client.post("/lessons/1/drafts/generate", follow_redirects=False)
+        await client.post("/lessons/1/drafts/generate/guide_low", follow_redirects=False)
         await client.post("/lessons/1/drafts/generate/guide_mid", follow_redirects=False)
         with session_factory() as session:
             draft = session.scalar(select(LessonDraft).where(LessonDraft.draft_type == "guide_mid"))
@@ -1338,15 +1342,15 @@ async def test_regenerating_lesson_drafts_upserts_current_drafts(tmp_path: Path)
         await _create_first_lesson(client, session_factory, course)
         _create_reviewed_outline(session_factory)
 
-        first_response = await client.post("/lessons/1/drafts/generate", follow_redirects=False)
-        second_response = await client.post("/lessons/1/drafts/generate", follow_redirects=False)
+        first_response = await client.post("/lessons/1/drafts/generate/diagnostic_probe", follow_redirects=False)
+        second_response = await client.post("/lessons/1/drafts/generate/diagnostic_probe", follow_redirects=False)
 
         assert first_response.status_code == 303
         assert second_response.status_code == 303
         with session_factory() as session:
             drafts = session.scalars(select(LessonDraft)).all()
-            assert len(drafts) == 2
-            assert len({(draft.lesson_id, draft.draft_type) for draft in drafts}) == 2
+            assert len(drafts) == 1
+            assert len({(draft.lesson_id, draft.draft_type) for draft in drafts}) == 1
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()

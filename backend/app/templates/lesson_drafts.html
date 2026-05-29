@@ -33,8 +33,11 @@
     <noscript>
       <p class="error">浏览器未启用 JavaScript。提交后请耐心等待生成完成，不要重复点击或刷新页面。</p>
     </noscript>
-    <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate" data-draft-generation-form data-loading-target="lesson-drafts-generation-hint" onsubmit="return handleLessonDraftGenerationSubmit(this);">
-      <button type="submit" data-draft-generation-button>生成前测与基础版导学案</button>
+    <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/diagnostic_probe" data-draft-generation-form data-loading-target="lesson-drafts-generation-hint" style="display:inline-block; margin-right:.75rem;" onsubmit="return handleLessonDraftGenerationSubmit(event, this);">
+      <button type="submit" data-draft-generation-button>生成课前学情测试</button>
+    </form>
+    <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_low" data-draft-generation-form data-loading-target="lesson-drafts-generation-hint" style="display:inline-block;" onsubmit="return handleLessonDraftGenerationSubmit(event, this);">
+      <button type="submit" data-draft-generation-button>生成基础版导学案</button>
     </form>
   {% else %}
     <p><a href="/lessons/{{ lesson.id }}/knowledge-outline">先生成并保存知识主干</a></p>
@@ -47,10 +50,10 @@
       <h2>可选扩展生成</h2>
       <p>基础版导学案为全班主文档。建议教师先复核基础版，再根据前测学情按需生成提升任务包或拓展挑战包；不鼓励每节课默认生成所有任务包，避免不必要 API 消耗。</p>
       <p>提升任务包适合已完成基础任务的学生；拓展挑战包适合兴趣小组或学有余力学生。</p>
-      <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_mid" data-draft-generation-form data-loading-target="lesson-drafts-generation-hint" style="display:inline-block; margin-right:.75rem;" onsubmit="return handleLessonDraftGenerationSubmit(this);">
+      <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_mid" data-draft-generation-form data-loading-target="lesson-drafts-generation-hint" style="display:inline-block; margin-right:.75rem;" onsubmit="return handleLessonDraftGenerationSubmit(event, this);">
         <button type="submit" data-draft-generation-button>生成提升任务包</button>
       </form>
-      <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_high" data-draft-generation-form data-loading-target="lesson-drafts-generation-hint" style="display:inline-block;" onsubmit="return handleLessonDraftGenerationSubmit(this);">
+      <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_high" data-draft-generation-form data-loading-target="lesson-drafts-generation-hint" style="display:inline-block;" onsubmit="return handleLessonDraftGenerationSubmit(event, this);">
         <button type="submit" data-draft-generation-button>生成拓展挑战包</button>
       </form>
     </section>
@@ -90,18 +93,24 @@
   </section>
 {% endif %}
 <script>
-  function handleLessonDraftGenerationSubmit(form) {
+  function handleLessonDraftGenerationSubmit(event, form) {
     const hintId = form.getAttribute('data-loading-target');
     const hint = hintId ? document.getElementById(hintId) : null;
     const buttons = document.querySelectorAll('[data-draft-generation-button]');
+    const clickedButton = event && event.submitter ? event.submitter : form.querySelector('[data-draft-generation-button]');
 
     if (hint) {
       hint.style.display = 'block';
     }
     buttons.forEach((button) => {
       button.disabled = true;
-      button.textContent = 'AI 正在生成，请稍候...';
+      if (button !== clickedButton) {
+        button.title = '当前已有生成任务进行中，请稍候';
+      }
     });
+    if (clickedButton) {
+      clickedButton.textContent = 'AI 正在生成，请稍候...';
+    }
     return true;
   }
 </script>

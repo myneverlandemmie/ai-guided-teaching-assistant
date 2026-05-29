@@ -90,3 +90,7 @@ def test_lesson_drafts_template_contains_generation_guard() -> None:
     assert "data-draft-generation-button" in template
     assert "handleLessonDraftGenerationSubmit" in template
     assert "button.disabled = true" in template
+    assert "event.submitter" in template
+    assert "button !== clickedButton" in template
+    assert "button.textContent = 'AI 正在生成，请稍候...'" not in template
+    assert "clickedButton.textContent = 'AI 正在生成，请稍候...'" in template

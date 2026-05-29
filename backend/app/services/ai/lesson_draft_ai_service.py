@@ -13,6 +13,7 @@ from app.services.ai.lesson_draft_prompt import LESSON_DRAFT_SYSTEM_MESSAGE, bui
 from app.services.ai.lesson_draft_service import (
     GeneratedLessonDraft,
     generate_basic_lesson_drafts,
+    generate_single_lesson_draft,
     generate_tiered_guide_draft,
 )
 from app.services.ai.sanitizer import sanitize_text_for_outline
@@ -36,6 +37,12 @@ def _fallback_tiered_draft(lesson: Lesson, outline: KnowledgeOutline, draft_type
     """生成本地结构化提升任务包或拓展挑战包。"""
 
     return _with_generated_by(generate_tiered_guide_draft(lesson, outline, draft_type), LOCAL_STRUCTURED_DRAFT)
+
+
+def _fallback_single_draft(lesson: Lesson, outline: KnowledgeOutline, draft_type: str) -> GeneratedLessonDraft:
+    """只生成当前目标 draft_type 的本地结构化草稿。"""
+
+    return _with_generated_by(generate_single_lesson_draft(lesson, outline, draft_type), LOCAL_STRUCTURED_DRAFT)
 
 
 def _is_usable_draft_content(draft_type: str, content: str) -> bool:
@@ -144,6 +151,27 @@ def generate_tiered_guide_draft_with_ai(
     """生成提升任务包或拓展挑战包，有 Key 时优先调用 DeepSeek。"""
 
     local_draft = _fallback_tiered_draft(lesson, outline, draft_type)
+    if not api_key:
+        return local_draft, True
+    try:
+        content, model_name = _call_deepseek_lesson_draft(lesson, outline, draft_type, api_key, selected_model)
+    except DeepSeekProviderError:
+        return local_draft, True
+    if not _is_usable_draft_content(draft_type, content):
+        return local_draft, True
+    return GeneratedLessonDraft(draft_type, local_draft.title, content, generated_by=model_name), False
+
+
+def generate_single_lesson_draft_with_ai(
+    lesson: Lesson,
+    outline: KnowledgeOutline,
+    draft_type: str,
+    api_key: str | None,
+    selected_model: str | None,
+) -> tuple[GeneratedLessonDraft, bool]:
+    """只生成指定 draft_type；AI 失败时也只 fallback 当前草稿。"""
+
+    local_draft = _fallback_single_draft(lesson, outline, draft_type)
     if not api_key:
         return local_draft, True
     try:
