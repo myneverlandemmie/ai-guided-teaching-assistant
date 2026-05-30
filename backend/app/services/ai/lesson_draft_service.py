@@ -14,9 +14,9 @@ from app.models.lesson_draft import LessonDraft
 
 DRAFT_TYPE_LABELS = {
     "diagnostic_probe": "课前学情测试",
-    "guide_low": "基础版导学案",
-    "guide_mid": "提升任务包",
-    "guide_high": "拓展挑战包",
+    "guide_low": "全班通用导学案 / 基础版导学案",
+    "guide_mid": "巩固提升任务包",
+    "guide_high": "拓展探究任务包",
 }
 CHAOXING_HEADERS = [
     "目录",

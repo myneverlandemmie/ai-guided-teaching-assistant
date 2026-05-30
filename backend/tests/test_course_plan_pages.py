@@ -1140,13 +1140,17 @@ async def test_default_lesson_draft_generation_creates_probe_and_low_guide(tmp_p
         assert page_response.status_code == 200
         assert "课前学情测试" in page_response.text
         assert "课前学情与学生导学案" in page_response.text
-        assert "以下内容为教师草稿，仅供审阅、修改、复制，不会自动发布给学生" in page_response.text
-        assert "基础版导学案是面向全班的主文档" in page_response.text
-        assert "提升任务包、拓展挑战包是可选补充" in page_response.text
+        assert "以下内容为教师草稿，仅供审阅、修改、复制与导出" in page_response.text
+        assert "系统不会自动发布给学生" in page_response.text
+        assert "全班通用导学案" in page_response.text
+        assert "AI 生成工作台" in page_response.text
+        assert "本页主文档" in page_response.text
+        assert "巩固提升任务包" in page_response.text
+        assert "拓展探究任务包" in page_response.text
         assert "生成课前学情测试" in page_response.text
         assert "生成基础版导学案" in page_response.text
-        assert "生成提升任务包" in page_response.text
-        assert "生成拓展挑战包" in page_response.text
+        assert "生成巩固提升任务包" in page_response.text
+        assert "生成拓展探究任务包" in page_response.text
         assert "AI 正在生成，请稍候" in page_response.text
         assert "请勿重复点击" in page_response.text
         assert "本地结构化草稿" in page_response.text
@@ -1293,7 +1297,7 @@ async def test_guide_low_can_download_markdown(tmp_path: Path) -> None:
         assert "rule-based" not in response.text
         assert "rule_based" not in response.text
         assert "mock" not in response.text
-        markdown_file = tmp_path / "exports" / "guides" / "lesson_1_guide_low.md"
+        markdown_file = tmp_path / "exports" / "guides" / "lesson_1_core_learning_guide.md"
         assert markdown_file.exists()
         assert markdown_file.read_text(encoding="utf-8") == expected_content
     finally:

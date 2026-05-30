@@ -32,9 +32,9 @@ def _outline() -> KnowledgeOutline:
 
 
 def test_public_draft_labels_are_task_pack_or_basic_document() -> None:
-    assert DRAFT_TYPE_LABELS["guide_low"] == "基础版导学案"
-    assert DRAFT_TYPE_LABELS["guide_mid"] == "提升任务包"
-    assert DRAFT_TYPE_LABELS["guide_high"] == "拓展挑战包"
+    assert DRAFT_TYPE_LABELS["guide_low"] == "全班通用导学案 / 基础版导学案"
+    assert DRAFT_TYPE_LABELS["guide_mid"] == "巩固提升任务包"
+    assert DRAFT_TYPE_LABELS["guide_high"] == "拓展探究任务包"
     for forbidden in ["低阶", "中阶", "高阶"]:
         assert all(forbidden not in label for label in DRAFT_TYPE_LABELS.values())
 
@@ -89,8 +89,9 @@ def test_lesson_drafts_template_contains_generation_guard() -> None:
     assert "data-draft-generation-form" in template
     assert "data-draft-generation-button" in template
     assert "handleLessonDraftGenerationSubmit" in template
-    assert "button.disabled = true" in template
-    assert "event.submitter" in template
-    assert "button !== clickedButton" in template
-    assert "button.textContent = 'AI 正在生成，请稍候...'" not in template
-    assert "clickedButton.textContent = 'AI 正在生成，请稍候...'" in template
+    script = Path("app/static/js/app.js").read_text(encoding="utf-8")
+    assert "button.disabled = true" in script
+    assert "event.submitter" in script
+    assert "button !== clickedButton" in script
+    assert "button.textContent = 'AI 正在生成，请稍候...'" not in script
+    assert "clickedButton.textContent = 'AI 正在生成，请稍候...'" in script

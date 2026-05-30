@@ -12,8 +12,9 @@ from uuid import uuid4
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 from starlette.concurrency import run_in_threadpool
 
@@ -25,6 +26,12 @@ from app.models.knowledge_outline import KnowledgeOutline
 from app.models.lesson import Lesson, LessonMaterial
 from app.models.lesson_draft import LESSON_DRAFT_TYPES, LessonDraft
 from app.services.course_plan.import_service import create_lessons_from_confirmed_planned_lessons, import_course_plan
+from app.services.course_management_service import (
+    create_course,
+    delete_course,
+    get_or_create_default_course,
+    rename_course,
+)
 from app.services.ai import provider as ai_provider
 from app.services.ai.deepseek_client import DeepSeekProviderError
 from app.services.ai.deepseek_client import (
@@ -60,6 +67,7 @@ from app.services.lesson_materials.document_text_extractor import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 COURSE_PLAN_UPLOAD_DIR = PROJECT_ROOT / "data" / "uploads" / "course-plans"
 LESSON_MATERIAL_UPLOAD_DIR = PROJECT_ROOT / "data" / "uploads" / "lesson-materials"
 CHAOXING_EXPORT_DIR = PROJECT_ROOT / "data" / "exports" / "chaoxing"
@@ -77,6 +85,11 @@ MATERIAL_TYPE_LABELS = {
 LESSON_STATUS_LABELS = {"draft": "草稿", "published": "已发布", "archived": "已归档"}
 KNOWLEDGE_OUTLINE_STATUS_LABELS = {"draft": "草稿", "reviewed": "已复核", "published": "已发布"}
 LESSON_DRAFT_STATUS_LABELS = {"draft": "草稿", "reviewed": "已复核"}
+LESSON_DRAFT_DOWNLOAD_NAME_PARTS = {
+    "guide_low": "core_learning_guide",
+    "guide_mid": "enhancement_task_pack",
+    "guide_high": "extension_challenge_pack",
+}
 DEFAULT_MATERIAL_TITLE_LABELS = {
     "pasted_text": "粘贴文本",
     "lesson_plan": "教案",
@@ -162,6 +175,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="AI Guided SQL Assessment", lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 templates.env.filters["basename"] = lambda value: Path(value).name if value else ""
 
@@ -286,7 +300,7 @@ def _safe_export_filename(filename: str | None, suffix: str) -> str | None:
 
 
 def get_or_create_demo_course(session: Session) -> Course:
-    """读取或创建一个演示课程。
+    """读取或创建默认测试课程。
 
     Args:
         session: SQLAlchemy Session。
@@ -298,16 +312,7 @@ def get_or_create_demo_course(session: Session) -> Course:
         SQLAlchemy 写入异常会继续向外抛出。
     """
 
-    course = session.scalar(select(Course).order_by(Course.id))
-    if course is not None:
-        return course
-
-    # 当前没有登录和课程管理，先创建一个 demo course 作为上传入口。
-    course = Course(title="数据库应用与数据分析", semester="2025-2026-2", status="draft")
-    session.add(course)
-    session.commit()
-    session.refresh(course)
-    return course
+    return get_or_create_default_course(session)
 
 
 @app.get("/")
@@ -401,8 +406,114 @@ async def list_courses(request: Request, db: Session = Depends(get_db)) -> HTMLR
     return templates.TemplateResponse(
         request,
         "courses.html",
-        {"courses": courses},
+        {"courses": courses, "error_message": None},
     )
+
+
+def _course_lesson_counts(db: Session, courses: list[Course]) -> dict[int, int]:
+    """统计课程下正式课次数量。"""
+
+    if not courses:
+        return {}
+    course_ids = [course.id for course in courses]
+    rows = db.execute(
+        select(Lesson.course_id, func.count(Lesson.id))
+        .where(Lesson.course_id.in_(course_ids))
+        .group_by(Lesson.course_id)
+    ).all()
+    return {course_id: count for course_id, count in rows}
+
+
+@app.get("/ui-v2/courses", response_class=HTMLResponse)
+async def list_courses_v2(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    """课程中心 V2 preview。"""
+
+    get_or_create_demo_course(db)
+    courses = db.scalars(select(Course).order_by(Course.id)).all()
+    return templates.TemplateResponse(
+        request,
+        "courses_v2.html",
+        {
+            "courses": courses,
+            "lesson_counts": _course_lesson_counts(db, courses),
+            "error_message": None,
+        },
+    )
+
+
+@app.post("/courses/create", response_class=HTMLResponse)
+async def create_course_route(
+    request: Request,
+    title: str = Form(""),
+    return_to: str = Form("/courses"),
+    db: Session = Depends(get_db),
+) -> Response:
+    """创建课程并返回课程中心。"""
+
+    redirect_to = sanitize_next_path(return_to) or "/courses"
+    try:
+        create_course(db, title)
+    except ValueError as exc:
+        courses = db.scalars(select(Course).order_by(Course.id)).all()
+        template_name = "courses_v2.html" if redirect_to == "/ui-v2/courses" else "courses.html"
+        context: dict[str, object] = {"courses": courses, "error_message": str(exc)}
+        if template_name == "courses_v2.html":
+            context["lesson_counts"] = _course_lesson_counts(db, courses)
+        return templates.TemplateResponse(
+            request,
+            template_name,
+            context,
+            status_code=400,
+        )
+    return RedirectResponse(url=redirect_to, status_code=303)
+
+
+@app.post("/courses/{course_id}/rename", response_class=HTMLResponse)
+async def rename_course_route(
+    course_id: int,
+    request: Request,
+    title: str = Form(""),
+    return_to: str = Form("/courses"),
+    db: Session = Depends(get_db),
+) -> Response:
+    """修改课程名称。"""
+
+    redirect_to = sanitize_next_path(return_to) or "/courses"
+    course = db.get(Course, course_id)
+    if course is None:
+        raise HTTPException(status_code=404, detail="课程不存在")
+
+    try:
+        rename_course(db, course, title)
+    except ValueError as exc:
+        courses = db.scalars(select(Course).order_by(Course.id)).all()
+        template_name = "courses_v2.html" if redirect_to == "/ui-v2/courses" else "courses.html"
+        context = {"courses": courses, "error_message": str(exc)}
+        if template_name == "courses_v2.html":
+            context["lesson_counts"] = _course_lesson_counts(db, courses)
+        return templates.TemplateResponse(
+            request,
+            template_name,
+            context,
+            status_code=400,
+        )
+    return RedirectResponse(url=redirect_to, status_code=303)
+
+
+@app.post("/courses/{course_id}/delete")
+async def delete_course_route(
+    course_id: int,
+    return_to: str = Form("/courses"),
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    """删除课程及其关联课次数据。"""
+
+    course = db.get(Course, course_id)
+    if course is None:
+        raise HTTPException(status_code=404, detail="课程不存在")
+
+    delete_course(db, course)
+    return RedirectResponse(url=sanitize_next_path(return_to) or "/courses", status_code=303)
 
 
 @app.get("/courses/{course_id}/course-plan/upload", response_class=HTMLResponse)
@@ -1003,7 +1114,8 @@ async def download_lesson_draft_markdown(
         raise HTTPException(status_code=400, detail="只有导学案草稿可以下载 Markdown")
 
     GUIDE_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-    filename = f"lesson_{lesson.id}_{draft.draft_type}.md"
+    filename_part = LESSON_DRAFT_DOWNLOAD_NAME_PARTS.get(draft.draft_type, "learning_draft")
+    filename = f"lesson_{lesson.id}_{filename_part}.md"
     output_path = GUIDE_EXPORT_DIR / filename
     output_path.write_text(draft.content, encoding="utf-8")
     return Response(

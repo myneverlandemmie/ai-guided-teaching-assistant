@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}AI 导学工作台 · 课程中心{% endblock %}
+{% block content %}
+<div class="ui-v2-shell course-center-v2">
+  <section class="course-hero-v2">
+    <div class="course-hero-copy-v2">
+      <span class="eyebrow-v2">教师 AI 备课工作台</span>
+      <h1>AI 导学工作台 · 课程中心</h1>
+      <p>围绕课程、课次资料、知识主干、课前学情测试和学生导学案组织教师备课流程。</p>
+      <p class="course-note-v2">AI 输出仅供教师审阅、修改与确认，不会自动发布给学生。</p>
+    </div>
+    <div class="course-hero-actions-v2">
+      <a class="button-link button-ghost" href="/courses">返回旧版课程页</a>
+    </div>
+  </section>
+
+  <section class="course-flow-v2" aria-label="AI 导学流程">
+    <article class="flow-step-v2 is-current">
+      <span>1</span>
+      <strong>选择课程</strong>
+      <p>进入课程备课工作区。</p>
+    </article>
+    <article class="flow-step-v2">
+      <span>2</span>
+      <strong>导入课次资料</strong>
+      <p>整理授课计划、教案与课件。</p>
+    </article>
+    <article class="flow-step-v2">
+      <span>3</span>
+      <strong>生成学情测试</strong>
+      <p>形成学习起点诊断草稿。</p>
+    </article>
+    <article class="flow-step-v2">
+      <span>4</span>
+      <strong>生成学生导学案</strong>
+      <p>输出可编辑、可下载的学习单。</p>
+    </article>
+  </section>
+
+  {% if error_message %}
+    <section class="course-alert-v2">
+      <p>{{ error_message }}</p>
+    </section>
+  {% endif %}
+
+  <section class="course-toolbar-v2">
+    <div class="course-toolbar-head-v2">
+      <span class="eyebrow-v2">课程操作</span>
+      <h2>新建课程</h2>
+      <p>创建新的教学任务入口，后续可上传授课计划并生成正式课次。</p>
+    </div>
+    <form method="post" action="/courses/create" class="course-create-form-v2">
+      <input type="hidden" name="return_to" value="/ui-v2/courses">
+      <div class="course-create-row-v2">
+        <label for="course-v2-create-title">课程名称</label>
+        <input id="course-v2-create-title" name="title" type="text" placeholder="例如：传感器应用基础">
+        <button type="submit">创建课程</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="course-list-panel-v2">
+    <div class="section-head-v2">
+      <div>
+        <span class="eyebrow-v2">课程列表</span>
+        <h2>选择一个课程开始备课</h2>
+      </div>
+      <p>共 {{ courses|length }} 门课程</p>
+    </div>
+
+    <div class="course-grid-v2">
+      {% for course in courses %}
+        {% set lesson_count = lesson_counts.get(course.id, 0) %}
+        <article class="course-card-v2">
+          <div class="course-card-head-v2">
+            <span class="status-dot-v2" aria-hidden="true"></span>
+            <span class="course-status-v2">
+              {% if lesson_count > 0 %}
+                已创建 {{ lesson_count }} 个正式课次
+              {% else %}
+                待上传授课计划
+              {% endif %}
+            </span>
+          </div>
+          <h3>{{ course.title }}</h3>
+          <p class="course-meta-v2">学期：{{ course.semester or "未设置" }} ｜ 状态：{{ course.status }}</p>
+
+          <div class="course-primary-actions-v2">
+            <a class="v2-action-button v2-action-button--primary" href="/courses/{{ course.id }}/course-plan/upload">上传授课计划</a>
+            <a class="v2-action-button v2-action-button--secondary" href="/courses/{{ course.id }}/lessons">查看正式课次</a>
+          </div>
+
+          <details class="course-rename-details-v2">
+            <summary>修改课程名</summary>
+            <form method="post" action="/courses/{{ course.id }}/rename" class="course-rename-form-v2">
+              <input type="hidden" name="return_to" value="/ui-v2/courses">
+              <label for="course-v2-rename-{{ course.id }}">新的课程名称</label>
+              <div class="course-rename-row-v2">
+                <input id="course-v2-rename-{{ course.id }}" name="title" type="text" value="{{ course.title }}">
+                <button type="submit" class="button-secondary">保存名称</button>
+              </div>
+            </form>
+          </details>
+
+          <details class="course-danger-details-v2">
+            <summary>危险操作</summary>
+            <form method="post" action="/courses/{{ course.id }}/delete" class="course-delete-form-v2" onsubmit="return confirm('确认删除该课程吗？该操作会删除该课程下的授课计划、正式课次、课次资料、知识主干和导学草稿。');">
+              <input type="hidden" name="return_to" value="/ui-v2/courses">
+              <p>删除课程会同时删除该课程下的授课计划、正式课次、课次资料、知识主干和导学草稿。</p>
+              <button type="submit" class="danger-button">删除课程</button>
+            </form>
+          </details>
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}

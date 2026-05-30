@@ -1,117 +1,218 @@
 {% extends "base.html" %}
 {% block title %}课前学情与学生导学案{% endblock %}
 {% block content %}
-<h1>课前学情与学生导学案</h1>
+<div class="drafts-shell">
+  <header class="page-header drafts-hero">
+    <div class="drafts-hero-top">
+      <a class="button-link button-ghost" href="/lessons/{{ lesson.id }}">← 返回课次详情</a>
+      <a class="button-link button-secondary" href="/ai/settings?next=/lessons/{{ lesson.id }}/drafts">AI 设置</a>
+    </div>
+    <div class="drafts-hero-main">
+      <p class="page-kicker">AI 导学工作台</p>
+      <h1 class="page-title">课前学情与学生导学案</h1>
+      <p class="page-subtitle">基于课次资料与课程知识主干生成 AI 草稿，供教师审阅、修改与确认。</p>
+      <div class="lesson-meta">
+        <span class="meta-pill">{{ lesson.title }}</span>
+        <span class="meta-pill">周次：{{ lesson.week }}</span>
+        <span class="meta-pill">课次：{{ lesson.lesson_no }}</span>
+        <span class="meta-pill">学时：{{ lesson.hours }}</span>
+        <span class="meta-pill">课次编码：{{ lesson.lesson_code or "未设置" }}</span>
+      </div>
+    </div>
+    <div class="process-steps" aria-label="生成流程">
+      <div class="process-step"><span class="step-index">1</span><strong>课次资料</strong><span>上传材料</span></div>
+      <div class="process-step"><span class="step-index">2</span><strong>知识主干</strong><span>确认结构</span></div>
+      <div class="process-step is-current"><span class="step-index">3</span><strong>学情测试</strong><span>诊断起点</span></div>
+      <div class="process-step is-current"><span class="step-index">4</span><strong>学生导学案</strong><span>生成学习单</span></div>
+    </div>
+  </header>
 
-<section class="card">
-  <h2>{{ lesson.title }}</h2>
-  <p>周次：{{ lesson.week }} ｜ 课次：{{ lesson.lesson_no }} ｜ 学时：{{ lesson.hours }}</p>
-  <p>课次编码：{{ lesson.lesson_code or "未设置" }}</p>
-  <p><a href="/lessons/{{ lesson.id }}">返回课次详情</a> ｜ <a href="/lessons/{{ lesson.id }}/knowledge-outline">查看课程知识主干</a></p>
-</section>
-
-<section class="card">
-  <h2>使用说明</h2>
-  <p>以下内容为教师草稿，仅供审阅、修改、复制，不会自动发布给学生，不代表最终教学设计。AI 或规则生成内容必须经教师审核、修改和确认。</p>
-  <p>课前学情测试用于判断学习起点，不作为正式考试成绩；本系统不做学生答题、不做发布、不做统计、不对接学习通 API。</p>
-  <p>基础版导学案是面向全班的主文档，建议优先生成并用于课堂；提升任务包、拓展挑战包是可选补充，教师应结合前测结果按需使用。</p>
-  <p>导学案采用学生学习单风格，供学生填写、记录学习过程、整理笔记和课后复盘。</p>
-  <p>生成过程中请勿重复点击，完成后可继续编辑、导出或下载。</p>
-  {% if chaoxing_export_url %}
-    <p class="status">学习通题库模板已生成：<a href="{{ chaoxing_export_url }}">下载学习通题库模板</a></p>
-  {% endif %}
-  {% if fallback_message %}
-    <p class="status">{{ fallback_message }}</p>
-  {% endif %}
-  {% if error_message %}
-    <p class="error">{{ error_message }}</p>
-  {% endif %}
-  {% if outline %}
-    <p id="lesson-drafts-generation-hint" data-lesson-drafts-generation-hint role="status" aria-live="polite" style="display:none; padding:.75rem 1rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; line-height:1.7;">
-      AI 正在生成，请稍候……如使用真实 API，可能需要几十秒；如服务繁忙，可能出现等待、网络波动或超时。请勿重复点击、刷新页面或关闭窗口。生成内容为草稿，需教师审核、修改与确认。
-    </p>
-    <noscript>
-      <p class="error">浏览器未启用 JavaScript。提交后请耐心等待生成完成，不要重复点击或刷新页面。</p>
-    </noscript>
-    <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/diagnostic_probe" data-draft-generation-form data-loading-target="lesson-drafts-generation-hint" style="display:inline-block; margin-right:.75rem;" onsubmit="return handleLessonDraftGenerationSubmit(event, this);">
-      <button type="submit" data-draft-generation-button>生成课前学情测试</button>
-    </form>
-    <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_low" data-draft-generation-form data-loading-target="lesson-drafts-generation-hint" style="display:inline-block;" onsubmit="return handleLessonDraftGenerationSubmit(event, this);">
-      <button type="submit" data-draft-generation-button>生成基础版导学案</button>
-    </form>
-  {% else %}
-    <p><a href="/lessons/{{ lesson.id }}/knowledge-outline">先生成并保存知识主干</a></p>
-  {% endif %}
-</section>
-
-{% if drafts %}
-  {% if has_low_guide %}
-    <section class="card">
-      <h2>可选扩展生成</h2>
-      <p>基础版导学案为全班主文档。建议教师先复核基础版，再根据前测学情按需生成提升任务包或拓展挑战包；不鼓励每节课默认生成所有任务包，避免不必要 API 消耗。</p>
-      <p>提升任务包适合已完成基础任务的学生；拓展挑战包适合兴趣小组或学有余力学生。</p>
-      <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_mid" data-draft-generation-form data-loading-target="lesson-drafts-generation-hint" style="display:inline-block; margin-right:.75rem;" onsubmit="return handleLessonDraftGenerationSubmit(event, this);">
-        <button type="submit" data-draft-generation-button>生成提升任务包</button>
-      </form>
-      <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_high" data-draft-generation-form data-loading-target="lesson-drafts-generation-hint" style="display:inline-block;" onsubmit="return handleLessonDraftGenerationSubmit(event, this);">
-        <button type="submit" data-draft-generation-button>生成拓展挑战包</button>
-      </form>
-    </section>
-  {% endif %}
-{% endif %}
-
-{% if drafts %}
-  {% for draft in drafts %}
-    <section class="card">
-      <h2>{{ draft_type_labels.get(draft.draft_type, draft.draft_type) }}</h2>
-      <p>
-        状态：{{ draft_status_labels.get(draft.status, draft.status) }} ｜ 生成方式：{% if draft.generated_by in ["rule_based", "local-structured-draft"] %}本地结构化草稿{% else %}AI 生成草稿（{{ draft.generated_by }}）{% endif %}{% if draft.source_outline_id %} ｜ 来源知识主干：{{ draft.source_outline_id }}{% endif %}
-      </p>
-      {% if draft.draft_type == "diagnostic_probe" %}
-        <form method="post" action="/lessons/{{ lesson.id }}/drafts/{{ draft.id }}/export-chaoxing">
-          <button type="submit">导出学习通题库模板</button>
-        </form>
-      {% elif draft.draft_type in ["guide_low", "guide_mid", "guide_high"] %}
-        <p><a href="/lessons/{{ lesson.id }}/drafts/{{ draft.id }}/download-md">下载 Markdown</a></p>
-      {% endif %}
-      <form method="post" action="/lessons/{{ lesson.id }}/drafts/{{ draft.id }}/save">
-        <p>
-          <label for="title-{{ draft.id }}">标题</label><br>
-          <input id="title-{{ draft.id }}" name="title" type="text" value="{{ draft.title }}" style="width:100%;">
-        </p>
-        <p>
-          <label for="content-{{ draft.id }}">草稿内容</label><br>
-          <textarea id="content-{{ draft.id }}" name="content" rows="24" style="width:100%; line-height:1.7;">{{ draft.content }}</textarea>
-        </p>
-        <button type="submit">保存教师修改</button>
-      </form>
-    </section>
-  {% endfor %}
-{% else %}
-  <section class="card">
-    <p>当前还没有导学草稿。请先生成知识主干，再点击“生成 / 更新导学草稿”。</p>
+  <section class="drafts-toolbar card">
+    <div class="action-row">
+      <a class="button-link button-secondary" href="/lessons/{{ lesson.id }}/knowledge-outline">查看课程知识主干</a>
+    </div>
+    {% if chaoxing_export_url %}
+      <p class="alert">学习通题库模板已生成：<a class="download-link" href="{{ chaoxing_export_url }}">下载学习通题库模板</a></p>
+    {% endif %}
+    {% if fallback_message %}
+      <p class="alert">{{ fallback_message }}</p>
+    {% endif %}
+    {% if error_message %}
+      <p class="error">{{ error_message }}</p>
+    {% endif %}
+    <p class="generation-status" data-global-generation-status role="status" aria-live="polite">AI 正在生成，请稍候……请勿重复点击、刷新页面或关闭窗口，完成后可继续编辑、导出或下载。</p>
   </section>
-{% endif %}
-<script>
-  function handleLessonDraftGenerationSubmit(event, form) {
-    const hintId = form.getAttribute('data-loading-target');
-    const hint = hintId ? document.getElementById(hintId) : null;
-    const buttons = document.querySelectorAll('[data-draft-generation-button]');
-    const clickedButton = event && event.submitter ? event.submitter : form.querySelector('[data-draft-generation-button]');
 
-    if (hint) {
-      hint.style.display = 'block';
-    }
-    buttons.forEach((button) => {
-      button.disabled = true;
-      if (button !== clickedButton) {
-        button.title = '当前已有生成任务进行中，请稍候';
-      }
-    });
-    if (clickedButton) {
-      clickedButton.textContent = 'AI 正在生成，请稍候...';
-    }
-    return true;
-  }
-</script>
+  <section class="drafts-workspace-panel drafts-generator" aria-label="AI 生成工作台">
+    <div class="section-title drafts-section-title">
+      <div>
+        <p class="page-kicker">第一屏</p>
+        <h2>AI 生成工作台</h2>
+        <p>先生成课前学情测试和全班通用导学案，再按需生成任务包。</p>
+      </div>
+    </div>
+
+    <div class="draft-workbench drafts-workspace">
+      <section class="draft-card drafts-card drafts-card-probe">
+        <div class="draft-card-header">
+          <div>
+            <span class="card-badge">学习起点诊断</span>
+            <h2>课前学情测试</h2>
+            <p>生成 5—8 道学习起点诊断题，可导出为学习通题库模板，供教师筛选使用。</p>
+          </div>
+        </div>
+        {% if outline %}
+          {% if drafts|selectattr('draft_type', 'equalto', 'diagnostic_probe')|list %}
+            <p class="draft-existing-note">已有草稿，可在下方编辑区查看。</p>
+          {% endif %}
+          <p id="diagnostic-probe-status" class="generation-status" role="status" aria-live="polite">AI 正在生成课前学情测试，请稍候……生成内容为草稿，需教师审核、修改与确认。</p>
+          <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/diagnostic_probe" data-draft-generation-form data-loading-target="diagnostic-probe-status" onsubmit="return handleLessonDraftGenerationSubmit(event, this);">
+            <div class="action-row">
+              <button class="button-primary" type="submit" data-draft-generation-button>生成课前学情测试</button>
+            </div>
+          </form>
+        {% else %}
+          <p class="empty-state"><a href="/lessons/{{ lesson.id }}/knowledge-outline">请先生成并保存知识主干</a>，再生成课前学情测试。</p>
+        {% endif %}
+      </section>
+
+      <div class="workbench-side drafts-workspace-main">
+        <section class="draft-card drafts-card primary-draft-card drafts-main-card is-hero">
+          <div class="draft-card-header">
+            <div>
+              <span class="card-badge">主文档</span>
+              <h2>全班通用导学案 / 基础版导学案</h2>
+              <p>面向全班使用的学生学习单，是本页主文档，建议优先生成并用于课堂。</p>
+            </div>
+          </div>
+          {% if outline %}
+            {% if has_low_guide %}
+              <p class="draft-existing-note">已有草稿，可在下方编辑区查看。</p>
+            {% endif %}
+            <p id="guide-low-status" class="generation-status" role="status" aria-live="polite">AI 正在生成基础版导学案，请稍候……生成内容为草稿，需教师审核、修改与确认。</p>
+            <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_low" data-draft-generation-form data-loading-target="guide-low-status" onsubmit="return handleLessonDraftGenerationSubmit(event, this);">
+              <div class="action-row">
+                <button class="button-primary" type="submit" data-draft-generation-button>生成基础版导学案</button>
+              </div>
+            </form>
+          {% else %}
+            <p class="empty-state"><a href="/lessons/{{ lesson.id }}/knowledge-outline">请先生成并保存知识主干</a>，再生成基础版导学案。</p>
+          {% endif %}
+        </section>
+
+        <div class="task-pack-row">
+          <section class="draft-card drafts-card secondary-task-card drafts-side-card">
+            <div class="draft-card-header">
+              <div>
+                <span class="card-badge">可选补充</span>
+                <h3>巩固提升任务包</h3>
+                <p>适合已完成基础任务的学生，作为基础版之后的可选补充。</p>
+              </div>
+            </div>
+            {% if has_low_guide %}
+              {% if drafts|selectattr('draft_type', 'equalto', 'guide_mid')|list %}
+                <p class="draft-existing-note">已有草稿，可在下方编辑区查看。</p>
+              {% endif %}
+              <p id="guide-mid-status" class="generation-status" role="status" aria-live="polite">AI 正在生成巩固提升任务包，请稍候……其他草稿不会被覆盖。</p>
+              <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_mid" data-draft-generation-form data-loading-target="guide-mid-status" onsubmit="return handleLessonDraftGenerationSubmit(event, this);">
+                <div class="action-row">
+                  <button class="button-primary" type="submit" data-draft-generation-button>生成巩固提升任务包</button>
+                </div>
+              </form>
+            {% else %}
+              <p class="empty-state">先生成基础版导学案后再按需使用。</p>
+            {% endif %}
+          </section>
+
+          <section class="draft-card drafts-card secondary-task-card drafts-side-card">
+            <div class="draft-card-header">
+              <div>
+                <span class="card-badge">可选挑战</span>
+                <h3>拓展探究任务包</h3>
+                <p>面向兴趣小组或学有余力学生，用于迁移应用和综合探究。</p>
+              </div>
+            </div>
+            {% if has_low_guide %}
+              {% if drafts|selectattr('draft_type', 'equalto', 'guide_high')|list %}
+                <p class="draft-existing-note">已有草稿，可在下方编辑区查看。</p>
+              {% endif %}
+              <p id="guide-high-status" class="generation-status" role="status" aria-live="polite">AI 正在生成拓展探究任务包，请稍候……其他草稿不会被覆盖。</p>
+              <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_high" data-draft-generation-form data-loading-target="guide-high-status" onsubmit="return handleLessonDraftGenerationSubmit(event, this);">
+                <div class="action-row">
+                  <button class="button-primary" type="submit" data-draft-generation-button>生成拓展探究任务包</button>
+                </div>
+              </form>
+            {% else %}
+              <p class="empty-state">先生成基础版导学案后再按需使用。</p>
+            {% endif %}
+          </section>
+        </div>
+      </div>
+    </div>
+    <p class="notice drafts-notice">以下内容为教师草稿，仅供审阅、修改、复制与导出；系统不会自动发布给学生；课前学情测试不作为正式考试成绩。本系统不做学生答题、不做发布、不做统计、不对接学习通 API。</p>
+  </section>
+
+  <section class="drafts-editor-section">
+    <div class="section-title drafts-section-title">
+      <div>
+        <p class="page-kicker">第二屏</p>
+        <h2>草稿编辑与导出区</h2>
+        <p>默认只展开一个草稿，可切换查看、编辑、保存或导出。</p>
+      </div>
+    </div>
+
+    {% if drafts %}
+      <div class="editor-tabs" role="tablist" aria-label="导学草稿编辑标签">
+        {% for draft in drafts %}
+          <button type="button" class="editor-tab {% if loop.first %}is-active{% endif %}" data-draft-tab-target="draft-panel-{{ draft.id }}" role="tab" aria-selected="{{ 'true' if loop.first else 'false' }}">
+            {{ draft_type_labels.get(draft.draft_type, draft.draft_type) }}
+          </button>
+        {% endfor %}
+      </div>
+
+      <div class="drafts-layout">
+        {% for draft in drafts %}
+          <section id="draft-panel-{{ draft.id }}" class="editor-panel {% if loop.first %}is-active{% endif %}" data-draft-editor-panel role="tabpanel">
+            <div class="draft-card drafts-card {% if draft.draft_type == 'guide_low' %}primary-draft-card{% else %}secondary-task-card{% endif %}">
+              <div class="editor-head">
+                <div>
+                  <h2 class="editor-title">{{ draft_type_labels.get(draft.draft_type, draft.draft_type) }}</h2>
+                  <p class="editor-meta">
+                    状态：{{ draft_status_labels.get(draft.status, draft.status) }} ｜ 生成方式：{% if draft.generated_by in ["rule_based", "local-structured-draft"] %}本地结构化草稿{% else %}AI 生成草稿（{{ draft.generated_by }}）{% endif %}{% if draft.source_outline_id %} ｜ 来源知识主干：{{ draft.source_outline_id }}{% endif %}
+                  </p>
+                </div>
+                <div class="action-row">
+                  {% if draft.draft_type == "diagnostic_probe" %}
+                    <form method="post" action="/lessons/{{ lesson.id }}/drafts/{{ draft.id }}/export-chaoxing">
+                      <button class="button-secondary" type="submit">导出学习通题库模板</button>
+                    </form>
+                  {% elif draft.draft_type in ["guide_low", "guide_mid", "guide_high"] %}
+                    <a class="button-link button-secondary" href="/lessons/{{ lesson.id }}/drafts/{{ draft.id }}/download-md">下载 Markdown</a>
+                  {% endif %}
+                </div>
+              </div>
+              <form class="editor-area" method="post" action="/lessons/{{ lesson.id }}/drafts/{{ draft.id }}/save">
+                <div class="editor-field">
+                  <label for="title-{{ draft.id }}">标题</label>
+                  <input id="title-{{ draft.id }}" name="title" type="text" value="{{ draft.title }}">
+                </div>
+                <div class="editor-field">
+                  <label for="content-{{ draft.id }}">草稿内容</label>
+                  <textarea class="editor-textarea" id="content-{{ draft.id }}" name="content" rows="18">{{ draft.content }}</textarea>
+                </div>
+                <div class="action-row">
+                  <button class="button-primary" type="submit">保存教师修改</button>
+                </div>
+              </form>
+            </div>
+          </section>
+        {% endfor %}
+      </div>
+    {% else %}
+      <section class="empty-state">
+        当前还没有导学草稿。请先确认知识主干，再按需生成课前学情测试或基础版导学案。
+      </section>
+    {% endif %}
+  </section>
+</div>
 {% endblock %}
