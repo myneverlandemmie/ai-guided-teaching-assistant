@@ -2158,10 +2158,11 @@ def test_deepseek_model_config_falls_back_when_env_is_invalid(monkeypatch: pytes
 
 def test_deepseek_config_accepts_v4_models_and_invalid_timeout_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AI_REQUEST_TIMEOUT_SECONDS", "bad")
-    for model_name in ["deepseek-v4-pro", "deepseek-v4-flash"]:
+    expected_timeouts = {"deepseek-v4-pro": 300.0, "deepseek-v4-flash": 180.0}
+    for model_name, expected_timeout in expected_timeouts.items():
         config = get_deepseek_config(model_name)
         assert config.model == model_name
-        assert config.timeout_seconds == 60.0
+        assert config.timeout_seconds == expected_timeout
 
     monkeypatch.setenv("AI_PROMPT_MATERIAL_MAX_CHARS", "bad")
     config = get_deepseek_config()

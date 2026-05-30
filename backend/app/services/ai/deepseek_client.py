@@ -16,7 +16,9 @@ from app.services.ai.knowledge_outline_prompt import (
 DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 FALLBACK_DEEPSEEK_MODELS = ("deepseek-v4-flash", "deepseek-v4-pro")
 FORBIDDEN_DEEPSEEK_MODELS = {"deepseek-chat", "deepseek-reasoner"}
-DEFAULT_TIMEOUT_SECONDS = 60.0
+DEFAULT_TIMEOUT_SECONDS = 180.0
+DEFAULT_FLASH_TIMEOUT_SECONDS = 180.0
+DEFAULT_PRO_TIMEOUT_SECONDS = 300.0
 DEFAULT_PROMPT_MATERIAL_MAX_CHARS = 12_000
 
 
@@ -100,6 +102,32 @@ def get_default_deepseek_model() -> str:
     return allowed_models[0]
 
 
+def get_deepseek_timeout_seconds(model_name: str | None = None) -> float:
+    """按模型读取 DeepSeek 等待时间，避免长材料生成过早超时。"""
+
+    model = normalize_model_name(model_name) or get_default_deepseek_model()
+    legacy_timeout = os.getenv("AI_REQUEST_TIMEOUT_SECONDS")
+    global_default = _parse_positive_float_env(
+        "DEEPSEEK_TIMEOUT_SECONDS",
+        _parse_positive_float_env("AI_REQUEST_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS),
+    )
+    if model == "deepseek-v4-pro":
+        return _parse_positive_float_env(
+            "DEEPSEEK_PRO_TIMEOUT_SECONDS",
+            _parse_positive_float_env("AI_REQUEST_TIMEOUT_SECONDS", DEFAULT_PRO_TIMEOUT_SECONDS)
+            if legacy_timeout is not None and os.getenv("DEEPSEEK_TIMEOUT_SECONDS") is None
+            else global_default if os.getenv("DEEPSEEK_TIMEOUT_SECONDS") is not None else DEFAULT_PRO_TIMEOUT_SECONDS,
+        )
+    if model == "deepseek-v4-flash":
+        return _parse_positive_float_env(
+            "DEEPSEEK_FLASH_TIMEOUT_SECONDS",
+            _parse_positive_float_env("AI_REQUEST_TIMEOUT_SECONDS", DEFAULT_FLASH_TIMEOUT_SECONDS)
+            if legacy_timeout is not None and os.getenv("DEEPSEEK_TIMEOUT_SECONDS") is None
+            else global_default if os.getenv("DEEPSEEK_TIMEOUT_SECONDS") is not None else DEFAULT_FLASH_TIMEOUT_SECONDS,
+        )
+    return global_default
+
+
 def get_deepseek_config(model_name: str | None = None) -> DeepSeekConfig:
     """从环境变量读取 DeepSeek 配置。"""
 
@@ -109,7 +137,7 @@ def get_deepseek_config(model_name: str | None = None) -> DeepSeekConfig:
     return DeepSeekConfig(
         base_url=os.getenv("DEEPSEEK_BASE_URL", DEFAULT_DEEPSEEK_BASE_URL).rstrip("/"),
         model=model,
-        timeout_seconds=_parse_positive_float_env("AI_REQUEST_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS),
+        timeout_seconds=get_deepseek_timeout_seconds(model),
         prompt_material_max_chars=_parse_positive_int_env(
             "AI_PROMPT_MATERIAL_MAX_CHARS",
             DEFAULT_PROMPT_MATERIAL_MAX_CHARS,

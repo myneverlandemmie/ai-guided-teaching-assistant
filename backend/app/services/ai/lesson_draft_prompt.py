@@ -2,9 +2,22 @@
 
 from __future__ import annotations
 
+import os
+import re
+
 from app.models.knowledge_outline import KnowledgeOutline
 from app.models.lesson import Lesson
 from app.services.ai.sanitizer import sanitize_text_for_outline
+
+DEFAULT_DRAFT_MATERIAL_BUDGETS = {
+    "diagnostic_probe": 60_000,
+    "guide_low": 80_000,
+    "guide_mid": 60_000,
+    "guide_high": 60_000,
+}
+DEFAULT_PER_FILE_MATERIAL_BUDGET = 30_000
+TRIM_NOTICE = "提示：以下材料可能经过长度控制，未必包含原始文件全部内容，教师需结合原始资料确认。"
+CODE_TRIM_NOTICE = "提示：以下代码或脚本材料已按长度预算截取，可能不是完整工程，教师需结合原始文件确认。"
 
 
 LESSON_DRAFT_SYSTEM_MESSAGE = """
@@ -18,8 +31,80 @@ LESSON_DRAFT_SYSTEM_MESSAGE = """
 - 不输出一键备课结果或比赛教案成稿；
 - 所有内容只是草稿，必须由教师审核、修改、确认后使用；
 - 不编造材料中没有的事实，材料不足时写“仅基于现有材料生成，需教师补充”；
+- 本系统面向通用教学材料，不限于编程或数据库课程；应基于可见材料生成。
+- 不要编造材料中没有出现的字段、器件、公式、函数、表名、实验步骤或知识点。
+- 如果材料被截断，应明确基于可见材料生成；如果代码、脚本、电路、公式、图示文本不完整，应提醒教师核对。
 - 不暗示学生端、自动评分或学习通 API 已实现。
 """.strip()
+
+
+def _parse_positive_int_env(name: str, default: int) -> int:
+    """安全解析正整数环境变量，非法值回退默认值。"""
+
+    try:
+        value = int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+def get_lesson_draft_material_budget(draft_type: str) -> int:
+    """读取不同草稿类型的通用材料预算。"""
+
+    env_names = {
+        "diagnostic_probe": "AI_DIAGNOSTIC_PROBE_MATERIAL_MAX_CHARS",
+        "guide_low": "AI_GUIDE_LOW_MATERIAL_MAX_CHARS",
+        "guide_mid": "AI_GUIDE_MID_MATERIAL_MAX_CHARS",
+        "guide_high": "AI_GUIDE_HIGH_MATERIAL_MAX_CHARS",
+    }
+    default = DEFAULT_DRAFT_MATERIAL_BUDGETS.get(draft_type, 60_000)
+    return _parse_positive_int_env(env_names.get(draft_type, "AI_LESSON_DRAFT_MATERIAL_MAX_CHARS"), default)
+
+
+def get_lesson_draft_per_file_budget() -> int:
+    """读取单份材料的默认长度预算。"""
+
+    return _parse_positive_int_env("AI_LESSON_DRAFT_PER_FILE_MAX_CHARS", DEFAULT_PER_FILE_MATERIAL_BUDGET)
+
+
+def trim_text_to_budget(text: str, max_chars: int, material_kind: str = "text") -> str:
+    """按通用边界裁剪文本，避免材料无限进入 prompt。"""
+
+    sanitized = sanitize_text_for_outline((text or "").strip())
+    if max_chars <= 0:
+        return ""
+    if len(sanitized) <= max_chars:
+        return sanitized
+
+    notice = CODE_TRIM_NOTICE if material_kind == "code" else TRIM_NOTICE
+    reserved = len(notice) + 2
+    if max_chars <= reserved + 20:
+        return notice[:max_chars]
+
+    cut_limit = max_chars - reserved
+    candidate = sanitized[:cut_limit]
+    boundary_positions = [
+        candidate.rfind("\n\n"),
+        candidate.rfind("\n#"),
+        candidate.rfind("\n- "),
+        candidate.rfind("\n"),
+        candidate.rfind("。"),
+        candidate.rfind("；"),
+        candidate.rfind(";"),
+    ]
+    boundary = max(boundary_positions)
+    if boundary >= max(80, int(cut_limit * 0.65)):
+        candidate = candidate[: boundary + 1]
+    candidate = candidate.rstrip()
+    return f"{candidate}\n\n{notice}"
+
+
+def _looks_like_code_or_script(text: str) -> bool:
+    """轻量识别代码/脚本材料，不做专项解析。"""
+
+    return bool(
+        re.search(r"```|#include\s*<|def\s+\w+\(|void\s+\w+\(|SELECT\s+.+FROM|CREATE\s+TABLE|setup\s*\(|loop\s*\(", text, re.I)
+    )
 
 
 def _lesson_name(lesson: Lesson) -> str:
@@ -28,13 +113,14 @@ def _lesson_name(lesson: Lesson) -> str:
     return f"{lesson.lesson_code}-{lesson.title}" if lesson.lesson_code else lesson.title
 
 
-def _outline_text(outline: KnowledgeOutline, max_length: int = 5000) -> str:
+def _outline_text(outline: KnowledgeOutline, draft_type: str) -> str:
     """取教师复核后的知识主干，并做基础脱敏和长度控制。"""
 
     text = sanitize_text_for_outline((outline.edited_content or outline.ai_raw_output or "").strip())
-    if len(text) <= max_length:
-        return text
-    return f"{text[:max_length]}..."
+    per_file_budget = get_lesson_draft_per_file_budget()
+    total_budget = get_lesson_draft_material_budget(draft_type)
+    material_kind = "code" if _looks_like_code_or_script(text) else "text"
+    return trim_text_to_budget(text, min(per_file_budget, total_budget), material_kind)
 
 
 def build_lesson_draft_prompt(lesson: Lesson, outline: KnowledgeOutline, draft_type: str) -> str:
@@ -53,13 +139,18 @@ def build_lesson_draft_prompt(lesson: Lesson, outline: KnowledgeOutline, draft_t
     """
 
     lesson_name = sanitize_text_for_outline(_lesson_name(lesson))
-    outline_text = _outline_text(outline)
+    outline_text = _outline_text(outline, draft_type)
     common_context = f"""
 课次：{lesson_name}
 教学内容摘要：{sanitize_text_for_outline(lesson.content_summary or "暂无")}
 
 教师确认后的课程知识主干：
 {outline_text or "暂无知识主干，需教师补充。"}
+
+通用材料边界：
+- 本系统面向通用教学材料，不限于 SQL、Python、C、单片机、传感器、三极管放大电路、英语、数学或公共基础课。
+- 以上内容可能经过长度控制，模型只能基于可见材料生成，不得编造不可见的字段、器件、公式、函数、表名、实验步骤或知识点。
+- 如果材料中包含代码、脚本、电路、公式、图示但文本不完整，必须提醒教师结合原始资料核对。
 """.strip()
 
     if draft_type == "diagnostic_probe":
@@ -275,5 +366,5 @@ def build_lesson_draft_prompt(lesson: Lesson, outline: KnowledgeOutline, draft_t
 - 我还需要老师帮助的是：……
 
 ## AI 草稿声明
-以上内容为草稿，仅供教师审阅、修改、复制，不会自动发布给学生。教师应结合课程标准、学生基础和课堂实际确认后使用。
+以上内容为草稿，仅供教师审阅、修改、复制，不会自动发布给学生，需教师审核、修改与确认后使用。
 """.strip()

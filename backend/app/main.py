@@ -834,7 +834,7 @@ async def show_lesson_drafts(
     drafts = _get_lesson_drafts(db, lesson.id)
     chaoxing_filename = _safe_export_filename(request.query_params.get("chaoxing_file"), ".xlsx")
     fallback_message = (
-        "AI 生成失败或当前未设置 API Key，已回退为本地结构化草稿。"
+        "DeepSeek 响应较慢、调用失败或当前未设置 API Key，已回退为本地结构化草稿。你可以稍后重试，或减少材料后再生成。"
         if request.query_params.get("draft_fallback") == "1"
         else None
     )
