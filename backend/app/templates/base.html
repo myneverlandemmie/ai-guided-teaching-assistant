@@ -9,10 +9,12 @@
 </head>
 <body>
   <main class="container">
-    <nav class="top-nav" aria-label="主导航">
-      <a href="/courses">课程列表</a>
-      <a href="/ai/settings">AI 设置</a>
-    </nav>
+    {% block top_nav %}
+      <nav class="top-nav" aria-label="主导航">
+        <a href="/courses">课程列表</a>
+        <a href="/ai/settings">AI 设置</a>
+      </nav>
+    {% endblock %}
     {% block content %}{% endblock %}
   </main>
 </body>

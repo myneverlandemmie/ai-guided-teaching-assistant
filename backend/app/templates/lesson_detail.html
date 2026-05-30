@@ -8,7 +8,11 @@
   <p>课次编码：{{ lesson.lesson_code }} ｜ 状态：<span class="status">{{ lesson_status_labels.get(lesson.status, lesson.status) }}</span></p>
   <p>教学内容摘要：{{ lesson.content_summary }}</p>
   <p>作业提示：{{ lesson.homework_hint }}</p>
-  <p><a href="/courses/{{ lesson.course_id }}/lessons">返回课次列表</a></p>
+  <p>
+    <a href="/courses/{{ lesson.course_id }}/lessons">返回课次列表</a>
+    ｜
+    <a href="/ui-v2/lessons/{{ lesson.id }}/materials-outline">进入 V2：课次资料与知识主干</a>
+  </p>
 </section>
 
 <h2>课次任务面板</h2>

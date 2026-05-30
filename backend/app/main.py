@@ -178,6 +178,7 @@ app = FastAPI(title="AI Guided SQL Assessment", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 templates.env.filters["basename"] = lambda value: Path(value).name if value else ""
+templates.env.filters["splitext"] = lambda value: Path(value).suffix.lstrip(".") if value else ""
 
 
 def _lesson_material_title_prefix(lesson: Lesson) -> str:
@@ -528,10 +529,11 @@ async def show_course_plan_upload_form(
     if course is None:
         raise HTTPException(status_code=404, detail="课程不存在")
 
+    return_to = sanitize_next_path(request.query_params.get("return_to")) or "/courses"
     return templates.TemplateResponse(
         request,
         "course_plan_upload.html",
-        {"course": course, "error_message": None},
+        {"course": course, "error_message": None, "return_to": return_to},
     )
 
 
@@ -540,6 +542,7 @@ async def upload_course_plan(
     course_id: int,
     request: Request,
     file: UploadFile = File(...),
+    return_to: str = Form(""),
     db: Session = Depends(get_db),
 ) -> Response:
     """接收 `.xlsx` 授课计划，保存运行时文件并调用导入 service。"""
@@ -548,6 +551,7 @@ async def upload_course_plan(
     if course is None:
         raise HTTPException(status_code=404, detail="课程不存在")
 
+    safe_return_to = sanitize_next_path(return_to) or "/courses"
     if not file.filename or not file.filename.lower().endswith(".xlsx"):
         return templates.TemplateResponse(
             request,
@@ -555,6 +559,7 @@ async def upload_course_plan(
             {
                 "course": course,
                 "error_message": "当前仅支持 .xlsx 格式的授课计划，请重新上传。",
+                "return_to": safe_return_to,
             },
             status_code=400,
         )
@@ -707,6 +712,41 @@ async def show_lesson_detail(
     )
 
 
+@app.get("/ui-v2/lessons/{lesson_id}/materials-outline", response_class=HTMLResponse)
+async def show_lesson_materials_outline_v2(
+    lesson_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """课次资料与知识主干 V2 preview。"""
+
+    lesson = db.scalar(
+        select(Lesson)
+        .options(selectinload(Lesson.course))
+        .where(Lesson.id == lesson_id)
+    )
+    if lesson is None:
+        raise HTTPException(status_code=404, detail="课次不存在")
+
+    materials = db.scalars(
+        select(LessonMaterial)
+        .where(LessonMaterial.lesson_id == lesson.id)
+        .order_by(LessonMaterial.id.desc())
+    ).all()
+    knowledge_outline = _get_latest_knowledge_outline(db, lesson.id)
+    return templates.TemplateResponse(
+        request,
+        "lesson_materials_outline_v2.html",
+        {
+            "lesson": lesson,
+            "materials": materials,
+            "knowledge_outline": knowledge_outline,
+            "material_type_labels": MATERIAL_TYPE_LABELS,
+            "knowledge_outline_status_labels": KNOWLEDGE_OUTLINE_STATUS_LABELS,
+        },
+    )
+
+
 def _lesson_material_context(db: Session, lesson: Lesson, error_message: str | None = None) -> dict[str, object]:
     """构造课次材料页面上下文。"""
 
@@ -734,11 +774,13 @@ async def add_lesson_material(
     title: str = Form(""),
     material_type: str = Form("pasted_text"),
     content: str = Form(""),
+    return_to: str = Form(""),
     files: list[UploadFile] | None = File(None),
     db: Session = Depends(get_db),
 ) -> Response:
     """为课次添加教学材料，支持粘贴文本和多文件上传。"""
 
+    redirect_to = sanitize_next_path(return_to) or f"/lessons/{lesson_id}"
     lesson = db.get(Lesson, lesson_id)
     if lesson is None:
         raise HTTPException(status_code=404, detail="课次不存在")
@@ -763,7 +805,7 @@ async def add_lesson_material(
         )
         db.add(material)
         db.commit()
-        return RedirectResponse(url=f"/lessons/{lesson.id}", status_code=303)
+        return RedirectResponse(url=redirect_to, status_code=303)
 
     if not uploaded_files:
         return templates.TemplateResponse(
@@ -818,12 +860,13 @@ async def add_lesson_material(
             status_code=400,
         )
 
-    return RedirectResponse(url=f"/lessons/{lesson.id}", status_code=303)
+    return RedirectResponse(url=redirect_to, status_code=303)
 
 
 @app.post("/lesson-materials/{material_id}/delete")
 async def delete_lesson_material(
     material_id: int,
+    return_to: str = Form(""),
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
     """删除课次教学资料，并尽量删除对应上传文件。"""
@@ -837,18 +880,20 @@ async def delete_lesson_material(
         Path(material.file_path).unlink(missing_ok=True)
     db.delete(material)
     db.commit()
-    return RedirectResponse(url=f"/lessons/{lesson_id}", status_code=303)
+    return RedirectResponse(url=sanitize_next_path(return_to) or f"/lessons/{lesson_id}", status_code=303)
 
 
 @app.post("/lessons/{lesson_id}/knowledge-outline/generate")
 async def generate_lesson_knowledge_outline(
     lesson_id: int,
     request: Request,
+    return_to: str = Form(""),
     db: Session = Depends(get_db),
 ) -> Response:
     """使用当前 AI Provider 为课次生成知识主干初稿。"""
 
     require_same_origin(request)
+    redirect_to = sanitize_next_path(return_to) or f"/lessons/{lesson_id}/knowledge-outline"
     lesson = db.get(Lesson, lesson_id)
     if lesson is None:
         raise HTTPException(status_code=404, detail="课次不存在")
@@ -876,6 +921,25 @@ async def generate_lesson_knowledge_outline(
             selected_model,
         )
     except DeepSeekProviderError as exc:
+        if redirect_to.startswith("/ui-v2/"):
+            materials = db.scalars(
+                select(LessonMaterial)
+                .where(LessonMaterial.lesson_id == lesson.id)
+                .order_by(LessonMaterial.id.desc())
+            ).all()
+            return templates.TemplateResponse(
+                request,
+                "lesson_materials_outline_v2.html",
+                {
+                    "lesson": lesson,
+                    "materials": materials,
+                    "knowledge_outline": _get_latest_knowledge_outline(db, lesson.id),
+                    "material_type_labels": MATERIAL_TYPE_LABELS,
+                    "knowledge_outline_status_labels": KNOWLEDGE_OUTLINE_STATUS_LABELS,
+                    "error_message": exc.user_message,
+                },
+                status_code=400,
+            )
         return templates.TemplateResponse(
             request,
             "knowledge_outline.html",
@@ -900,7 +964,7 @@ async def generate_lesson_knowledge_outline(
     )
     db.add(outline)
     db.commit()
-    return RedirectResponse(url=f"/lessons/{lesson.id}/knowledge-outline", status_code=303)
+    return RedirectResponse(url=redirect_to, status_code=303)
 
 
 @app.get("/lessons/{lesson_id}/knowledge-outline", response_class=HTMLResponse)
@@ -1129,6 +1193,7 @@ async def download_lesson_draft_markdown(
 async def save_knowledge_outline(
     outline_id: int,
     edited_content: str = Form(...),
+    return_to: str = Form(""),
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
     """保存教师编辑后的知识主干。"""
@@ -1141,4 +1206,7 @@ async def save_knowledge_outline(
     outline.edited_content = edited_content.strip()
     outline.status = "reviewed"
     db.commit()
-    return RedirectResponse(url=f"/lessons/{outline.lesson_id}/knowledge-outline", status_code=303)
+    return RedirectResponse(
+        url=sanitize_next_path(return_to) or f"/lessons/{outline.lesson_id}/knowledge-outline",
+        status_code=303,
+    )

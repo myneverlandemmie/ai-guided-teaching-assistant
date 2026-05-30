@@ -1,16 +1,23 @@
 {% extends "base.html" %}
 {% block title %}AI 导学工作台 · 课程中心{% endblock %}
+{% block top_nav %}{% endblock %}
 {% block content %}
 <div class="ui-v2-shell course-center-v2">
+  <nav class="v2-topbar" aria-label="V2 产品导航">
+    <a class="v2-brand" href="/ui-v2/courses">
+      <span class="v2-brand-mark" aria-hidden="true"></span>
+      <span>智学导评 V0.2</span>
+    </a>
+    <div class="v2-breadcrumb"><span>课程中心</span></div>
+    <a class="v2-topbar-link" href="/ai/settings">AI 设置</a>
+  </nav>
+
   <section class="course-hero-v2">
     <div class="course-hero-copy-v2">
       <span class="eyebrow-v2">教师 AI 备课工作台</span>
       <h1>AI 导学工作台 · 课程中心</h1>
       <p>围绕课程、课次资料、知识主干、课前学情测试和学生导学案组织教师备课流程。</p>
       <p class="course-note-v2">AI 输出仅供教师审阅、修改与确认，不会自动发布给学生。</p>
-    </div>
-    <div class="course-hero-actions-v2">
-      <a class="button-link button-ghost" href="/courses">返回旧版课程页</a>
     </div>
   </section>
 
@@ -62,7 +69,7 @@
   <section class="course-list-panel-v2">
     <div class="section-head-v2">
       <div>
-        <span class="eyebrow-v2">课程列表</span>
+        <span class="eyebrow-v2">课程工作区</span>
         <h2>选择一个课程开始备课</h2>
       </div>
       <p>共 {{ courses|length }} 门课程</p>
@@ -86,7 +93,7 @@
           <p class="course-meta-v2">学期：{{ course.semester or "未设置" }} ｜ 状态：{{ course.status }}</p>
 
           <div class="course-primary-actions-v2">
-            <a class="v2-action-button v2-action-button--primary" href="/courses/{{ course.id }}/course-plan/upload">上传授课计划</a>
+            <a class="v2-action-button v2-action-button--primary" href="/courses/{{ course.id }}/course-plan/upload?return_to=/ui-v2/courses">上传授课计划</a>
             <a class="v2-action-button v2-action-button--secondary" href="/courses/{{ course.id }}/lessons">查看正式课次</a>
           </div>
 

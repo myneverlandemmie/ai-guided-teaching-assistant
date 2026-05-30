@@ -51,19 +51,23 @@ async def test_courses_v2_page_is_accessible_and_uses_real_courses(tmp_path: Pat
 
         assert response.status_code == 200
         assert "AI 导学工作台 · 课程中心" in response.text
+        assert "智学导评 V0.2" in response.text
         assert "教师 AI 备课工作台" in response.text
         assert "传感器应用基础" in response.text
         assert "新建课程" in response.text
         assert 'action="/courses/create"' in response.text
         assert 'name="return_to" value="/ui-v2/courses"' in response.text
         assert "上传授课计划" in response.text
+        assert f"/course-plan/upload?return_to=/ui-v2/courses" in response.text
         assert "查看正式课次" in response.text
         assert "course-rename-details-v2" in response.text
         assert "修改课程名" in response.text
         assert "course-danger-details-v2" in response.text
         assert "危险操作" in response.text
         assert "删除课程" in response.text
-        assert "AI 设置" not in response.text.split("course-hero-actions-v2", 1)[-1].split("</section>", 1)[0]
+        assert "AI 设置" in response.text
+        assert "返回旧版课程页" not in response.text
+        assert "课程列表" not in response.text
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()

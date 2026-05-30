@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% block title %}课次资料与知识主干{% endblock %}
+{% block top_nav %}{% endblock %}
+{% block content %}
+<div class="ui-v2-shell lesson-materials-v2">
+  {% set v2_return_to = "/ui-v2/lessons/" ~ lesson.id ~ "/materials-outline" %}
+  <nav class="v2-topbar" aria-label="V2 产品导航">
+    <a class="v2-brand" href="/ui-v2/courses">
+      <span class="v2-brand-mark" aria-hidden="true"></span>
+      <span>智学导评 V0.2</span>
+    </a>
+    <div class="v2-breadcrumb">
+      <span>课程中心</span>
+      <span class="v2-breadcrumb-separator">|</span>
+      <span>正式课次</span>
+      <span class="v2-breadcrumb-separator">|</span>
+      <span>课次资料与知识主干</span>
+    </div>
+    <a class="v2-topbar-link" href="/ai/settings">AI 设置</a>
+  </nav>
+
+  <section class="materials-hero-v2">
+    <div class="materials-hero-copy-v2">
+      <span class="eyebrow-v2">课次工作台</span>
+      <h1>课次资料与知识主干</h1>
+      <p>整理本课资料，生成知识主干，为课前学情测试与学生导学案提供依据。</p>
+      <div class="lesson-pills-v2" aria-label="课次信息">
+        <span>课程：{{ lesson.course.title if lesson.course else "未设置" }}</span>
+        <span>课题：{{ lesson.title }}</span>
+        <span>周次：{{ lesson.week }}</span>
+        <span>课次：{{ lesson.lesson_no }}</span>
+        <span>学时：{{ lesson.hours }}</span>
+        <span>编码：{{ lesson.lesson_code or "未设置" }}</span>
+      </div>
+    </div>
+    <div class="v2-hero-actions materials-hero-actions-v2">
+      <a class="button-link" href="/ui-v2/courses">返回课程中心</a>
+      <a class="button-link button-ghost" href="/courses/{{ lesson.course_id }}/lessons">返回正式课次列表</a>
+    </div>
+  </section>
+
+  <section class="materials-flow-v2" aria-label="AI 导学流程">
+    <article class="flow-step-v2">
+      <span>1</span>
+      <strong>选择课程</strong>
+      <p>进入课程备课工作区。</p>
+    </article>
+    <article class="flow-step-v2 is-current">
+      <span>2</span>
+      <strong>课次资料与知识主干</strong>
+      <p>整理资料并生成本课知识结构。</p>
+    </article>
+    <article class="flow-step-v2">
+      <span>3</span>
+      <strong>课前学情测试</strong>
+      <p>下一阶段生成学习起点诊断。</p>
+    </article>
+    <article class="flow-step-v2">
+      <span>4</span>
+      <strong>学生导学案</strong>
+      <p>生成学生学习单与任务包。</p>
+    </article>
+  </section>
+
+  <section class="materials-next-v2" aria-label="下一阶段入口">
+    <div>
+      <span class="eyebrow-v2">下一阶段</span>
+      <p>完成资料整理和知识主干确认后，可继续生成课前学情测试和学生导学案。</p>
+    </div>
+    <div class="materials-next-actions-v2">
+      <a class="v2-action-button v2-action-button--secondary" href="/lessons/{{ lesson.id }}/drafts">进入课前学情测试</a>
+      <a class="v2-action-button v2-action-button--secondary" href="/lessons/{{ lesson.id }}/drafts">进入学生导学案</a>
+    </div>
+  </section>
+
+  <section class="materials-upload-panel-v2">
+    <div class="section-head-v2">
+      <div>
+        <span class="eyebrow-v2">资料添加</span>
+        <h2>添加本课资料</h2>
+      </div>
+      <p>支持文件上传和粘贴文本。系统提取文本后用于知识主干生成。</p>
+    </div>
+
+    <div class="materials-upload-grid-v2">
+      <article class="materials-input-card-v2">
+        <h3>上传课次资料</h3>
+        <p>支持 txt / md / docx / pptx，上传后系统提取文本用于知识主干生成。</p>
+        <form method="post" action="/lessons/{{ lesson.id }}/materials" enctype="multipart/form-data">
+          <input type="hidden" name="return_to" value="{{ v2_return_to }}">
+          <input type="hidden" name="material_type" value="supplementary">
+          <label for="file-title-v2">资料标题</label>
+          <input id="file-title-v2" name="title" type="text" placeholder="可不填，系统会自动生成">
+          <label for="files-v2">选择文件</label>
+          <input id="files-v2" name="files" type="file" accept=".txt,.md,.docx,.pptx" multiple required>
+          <button type="submit">上传资料</button>
+        </form>
+      </article>
+
+      <article class="materials-input-card-v2">
+        <h3>粘贴补充资料</h3>
+        <p>可粘贴教案片段、课堂任务、实训步骤或补充说明。</p>
+        <form method="post" action="/lessons/{{ lesson.id }}/materials">
+          <input type="hidden" name="return_to" value="{{ v2_return_to }}">
+          <input type="hidden" name="material_type" value="pasted_text">
+          <label for="text-title-v2">资料标题</label>
+          <input id="text-title-v2" name="title" type="text" placeholder="可不填，系统会自动生成">
+          <label for="content-v2">粘贴文本内容</label>
+          <textarea id="content-v2" name="content" rows="8" placeholder="粘贴本课相关教学资料、任务要求或补充说明" required></textarea>
+          <button type="submit">保存文本资料</button>
+        </form>
+      </article>
+    </div>
+  </section>
+
+  <section class="materials-list-panel-v2">
+    <div class="section-head-v2">
+      <div>
+        <span class="eyebrow-v2">资料列表</span>
+        <h2>已添加资料</h2>
+      </div>
+      <p>共 {{ materials|length }} 份资料。资料正文不会在此处全部展开。</p>
+    </div>
+
+    {% if materials %}
+      <div class="materials-list-v2">
+        {% for material in materials %}
+          <article class="material-item-v2">
+            <div class="material-type-mark-v2">
+              {% if material.file_path %}
+                {{ material.file_path|basename|splitext|upper }}
+              {% elif material.material_type == "pasted_text" %}
+                文本
+              {% else %}
+                资料
+              {% endif %}
+            </div>
+            <div class="material-body-v2">
+              <h3>{{ material.title }}</h3>
+              <p class="material-meta-v2">
+                {{ material_type_labels.get(material.material_type, material.material_type) }}
+                ｜
+                {% if material.file_path %}
+                  原始文件名：{{ material.file_path|basename }}
+                {% else %}
+                  来源：粘贴文本
+                {% endif %}
+              </p>
+              <p class="material-excerpt-v2">{{ material.content[:120] }}{% if material.content|length > 120 %}...{% endif %}</p>
+            </div>
+            <form method="post" action="/lesson-materials/{{ material.id }}/delete" onsubmit="return confirm('确认删除这份资料吗？');">
+              <input type="hidden" name="return_to" value="{{ v2_return_to }}">
+              <button type="submit" class="danger-button">删除</button>
+            </form>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-v2">
+        <p>还没有添加课次资料。请先上传教案、课件或粘贴文本，再生成知识主干。</p>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="outline-panel-v2">
+    <div class="outline-summary-v2">
+      <span class="eyebrow-v2">知识主干</span>
+      <h2>知识主干</h2>
+      <p>系统会基于课次资料整理本课核心概念、技能步骤、易错点与教学任务。</p>
+      <p class="outline-status-v2">
+        当前状态：
+        {% if knowledge_outline %}
+          {{ knowledge_outline_status_labels.get(knowledge_outline.status, knowledge_outline.status) }}
+        {% else %}
+          未生成
+        {% endif %}
+      </p>
+      <p class="course-note-v2">AI 输出仅供教师审阅、修改与确认。</p>
+      <form method="post" action="/lessons/{{ lesson.id }}/knowledge-outline/generate" data-outline-generation-form data-loading-target="outline-v2-generation-hint" onsubmit="return handleOutlineGenerationSubmit(this);">
+        <input type="hidden" name="return_to" value="{{ v2_return_to }}">
+        <p id="outline-v2-generation-hint" class="generation-status" data-outline-generation-hint role="status" aria-live="polite">
+          正在生成知识主干，请勿重复点击。无 API Key 时将使用本地结构化草稿。
+        </p>
+        <button type="submit" data-outline-generation-button>
+          {% if knowledge_outline %}重新生成知识主干{% else %}生成知识主干{% endif %}
+        </button>
+      </form>
+    </div>
+
+    <div class="outline-editor-v2">
+      {% if knowledge_outline %}
+        <form method="post" action="/knowledge-outlines/{{ knowledge_outline.id }}/save">
+          <input type="hidden" name="return_to" value="{{ v2_return_to }}">
+          <label for="outline-content-v2">知识主干内容</label>
+          <textarea id="outline-content-v2" name="edited_content" rows="18">{{ knowledge_outline.edited_content }}</textarea>
+          <button type="submit">保存教师修改</button>
+        </form>
+      {% else %}
+        <div class="empty-v2">
+          <p>当前课次还没有知识主干。请先添加资料，再生成知识主干草稿。</p>
+        </div>
+      {% endif %}
+    </div>
+  </section>
+</div>
+{% endblock %}

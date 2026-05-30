@@ -1,41 +1,71 @@
 {% extends "base.html" %}
 {% block title %}课次列表{% endblock %}
+{% block top_nav %}{% endblock %}
 {% block content %}
-<h1>正式课次列表</h1>
-<section class="card">
-  <p>课程标题：{{ course.title }}</p>
-  <p>正式课次数量：{{ lesson_count }}</p>
-  <p><a href="/courses/{{ course.id }}/course-plan/upload">继续上传授课计划</a></p>
-</section>
+<div class="ui-v2-shell lessons-transition-v2">
+  <nav class="v2-topbar" aria-label="V2 产品导航">
+    <a class="v2-brand" href="/ui-v2/courses">
+      <span class="v2-brand-mark" aria-hidden="true"></span>
+      <span>智学导评 V0.2</span>
+    </a>
+    <div class="v2-breadcrumb">
+      <span>课程中心</span>
+      <span class="v2-breadcrumb-separator">|</span>
+      <span>正式课次</span>
+    </div>
+    <a class="v2-topbar-link" href="/ai/settings">AI 设置</a>
+  </nav>
 
-<table>
-  <thead>
-    <tr>
-      <th>周次</th>
-      <th>课次</th>
-      <th>学时</th>
-      <th>课次编码</th>
-      <th>课次标题</th>
-      <th>教学内容摘要</th>
-      <th>作业提示</th>
-      <th>状态</th>
-      <th>操作</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for lesson in lessons %}
-      <tr>
-        <td>{{ lesson.week }}</td>
-        <td>{{ lesson.lesson_no }}</td>
-        <td>{{ lesson.hours }}</td>
-        <td>{{ lesson.lesson_code }}</td>
-        <td>{{ lesson.title }}</td>
-        <td>{{ lesson.content_summary }}</td>
-        <td>{{ lesson.homework_hint }}</td>
-        <td>{{ lesson.status }}</td>
-        <td><a href="/lessons/{{ lesson.id }}">查看详情</a></td>
-      </tr>
-    {% endfor %}
-  </tbody>
-</table>
+  <section class="lessons-head-v2">
+    <div>
+      <span class="eyebrow-v2">正式课次</span>
+      <h1>正式课次列表</h1>
+      <p>从这里进入每一课次的资料整理、知识主干、课前学情测试和学生导学案。</p>
+    </div>
+    <div class="lessons-head-actions-v2">
+      <a class="button-link" href="/ui-v2/courses">返回课程中心</a>
+      <a class="button-link button-ghost" href="/courses/{{ course.id }}/course-plan/upload">继续上传授课计划</a>
+    </div>
+  </section>
+
+  <section class="lessons-summary-v2">
+    <span>课程：{{ course.title }}</span>
+    <span>正式课次数量：{{ lesson_count }}</span>
+  </section>
+
+  <section class="lessons-table-panel-v2">
+    <table>
+      <thead>
+        <tr>
+          <th>周次</th>
+          <th>课次</th>
+          <th>学时</th>
+          <th>课次编码</th>
+          <th>课次标题</th>
+          <th>教学内容摘要</th>
+          <th>状态</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lesson in lessons %}
+          <tr>
+            <td>{{ lesson.week }}</td>
+            <td>{{ lesson.lesson_no }}</td>
+            <td>{{ lesson.hours }}</td>
+            <td>{{ lesson.lesson_code }}</td>
+            <td>{{ lesson.title }}</td>
+            <td>{{ lesson.content_summary }}</td>
+            <td>{{ lesson.status }}</td>
+            <td class="lesson-table-actions-v2">
+              <a href="/ui-v2/lessons/{{ lesson.id }}/materials-outline">资料主干</a>
+              <a href="/lessons/{{ lesson.id }}/drafts">学情测试</a>
+              <a href="/lessons/{{ lesson.id }}/drafts">导学案</a>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
 {% endblock %}

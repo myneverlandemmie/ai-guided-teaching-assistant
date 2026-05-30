@@ -230,6 +230,32 @@ async def test_upload_page_is_accessible(tmp_path: Path) -> None:
         assert response.status_code == 200
         assert "上传授课计划" in response.text
         assert "选择 .xlsx 授课计划文件" in response.text
+        assert 'href="/courses"' in response.text
+        assert "智学导评 V0.2" not in response.text
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_upload_page_uses_safe_return_to_for_v2_entry(tmp_path: Path) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        response = await client.get(f"/courses/{course.id}/course-plan/upload?return_to=/ui-v2/courses")
+        unsafe_response = await client.get(
+            f"/courses/{course.id}/course-plan/upload?return_to=https://evil.example/path"
+        )
+
+        assert response.status_code == 200
+        assert 'href="/ui-v2/courses"' in response.text
+        assert 'name="return_to" value="/ui-v2/courses"' in response.text
+        assert "智学导评 V0.2" in response.text
+        assert "课程列表" not in response.text
+        assert unsafe_response.status_code == 200
+        assert 'href="https://evil.example/path"' not in unsafe_response.text
+        assert 'href="/courses"' in unsafe_response.text
+        assert "智学导评 V0.2" not in unsafe_response.text
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
@@ -460,7 +486,7 @@ async def test_lessons_page_is_accessible_and_shows_created_lessons(tmp_path: Pa
 
 
 @pytest.mark.anyio
-async def test_lessons_list_links_to_lesson_detail(tmp_path: Path) -> None:
+async def test_lessons_list_links_to_v2_materials_outline(tmp_path: Path) -> None:
     client, session_factory = _build_test_client(tmp_path)
     course = _create_course(session_factory)
     try:
@@ -477,8 +503,12 @@ async def test_lessons_list_links_to_lesson_detail(tmp_path: Path) -> None:
         response = await client.get(f"/courses/{course.id}/lessons")
 
         assert response.status_code == 200
-        assert "查看详情" in response.text
-        assert "/lessons/1" in response.text
+        assert "查看详情" not in response.text
+        assert "作业提示" not in response.text
+        assert "资料主干" in response.text
+        assert "学情测试" in response.text
+        assert "导学案" in response.text
+        assert "/ui-v2/lessons/1/materials-outline" in response.text
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
