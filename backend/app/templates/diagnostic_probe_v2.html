@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+{% block title %}课前学情测试{% endblock %}
+{% block top_nav %}{% endblock %}
+{% block content %}
+<div class="ui-v2-shell diagnostic-probe-v2" data-diagnostic-v2>
+  {% set v2_return_to = "/ui-v2/lessons/" ~ lesson.id ~ "/diagnostic-probe" %}
+  <nav class="v2-topbar" aria-label="V2 产品导航">
+    <a class="v2-brand" href="/ui-v2/courses">
+      <span class="v2-brand-mark" aria-hidden="true"></span>
+      <span>智学导评 V0.2</span>
+    </a>
+    <div class="v2-breadcrumb">
+      <span>课程中心</span>
+      <span class="v2-breadcrumb-separator">|</span>
+      <span>正式课次</span>
+      <span class="v2-breadcrumb-separator">|</span>
+      <span>课前学情测试</span>
+    </div>
+    <a class="v2-topbar-link" href="/ai/settings">AI 设置</a>
+  </nav>
+
+  <section class="diagnostic-hero-v2">
+    <div class="diagnostic-hero-copy-v2">
+      <span class="eyebrow-v2">学习起点诊断</span>
+      <h1>课前学情测试</h1>
+      <p>基于课程知识主干生成课前诊断题，帮助教师了解学生基础，不作为正式考试成绩。</p>
+      <div class="lesson-pills-v2" aria-label="课次信息">
+        <span>课程：{{ lesson.course.title if lesson.course else "未设置" }}</span>
+        <span>课题：{{ lesson.title }}</span>
+        <span>周次：{{ lesson.week }}</span>
+        <span>课次：{{ lesson.lesson_no }}</span>
+        <span>学时：{{ lesson.hours }}</span>
+        <span>编码：{{ lesson.lesson_code or "未设置" }}</span>
+      </div>
+    </div>
+    <div class="v2-hero-actions diagnostic-hero-actions-v2">
+      <a class="button-link" href="/ui-v2/courses">返回课程中心</a>
+      <a class="button-link button-ghost" href="/courses/{{ lesson.course_id }}/lessons">返回正式课次列表</a>
+    </div>
+  </section>
+
+  <section class="materials-flow-v2" aria-label="AI 导学流程">
+    <article class="flow-step-v2">
+      <span>1</span>
+      <strong>选择课程</strong>
+      <p>进入课程备课工作区。</p>
+    </article>
+    <article class="flow-step-v2">
+      <span>2</span>
+      <strong>课程资料整理</strong>
+      <p>整理资料，形成知识主干与备课参考。</p>
+    </article>
+    <article class="flow-step-v2 is-current">
+      <span>3</span>
+      <strong>课前学情测试</strong>
+      <p>了解学生课前基础。</p>
+    </article>
+    <article class="flow-step-v2">
+      <span>4</span>
+      <strong>学生导学案</strong>
+      <p>形成学生学习单与任务包。</p>
+    </article>
+  </section>
+
+  <section class="diagnostic-stage-nav-v2 materials-next-v2" aria-label="前后阶段">
+    <div>
+      <span class="eyebrow-v2">前后阶段</span>
+      <p>完成课程资料整理后，可在本页查看与调整课前学情测试，并继续准备学生导学案与任务包。</p>
+    </div>
+    <div class="materials-next-actions-v2">
+      <a class="v2-action-button v2-action-button--secondary" href="/ui-v2/lessons/{{ lesson.id }}/materials-outline">进入课程资料整理</a>
+      <a class="v2-action-button v2-action-button--secondary" href="/lessons/{{ lesson.id }}/drafts">进入学生导学案</a>
+    </div>
+  </section>
+
+  {% if chaoxing_export_url %}
+    <p class="alert">学习通题库模板已生成：<a class="download-link" href="{{ chaoxing_export_url }}">下载学习通题库模板</a></p>
+  {% endif %}
+  {% if fallback_message %}
+    <p class="alert">{{ fallback_message }}</p>
+  {% endif %}
+
+  <section class="diagnostic-generate-panel-v2">
+    <div>
+      <span class="eyebrow-v2">生成草稿</span>
+      <h2>生成课前学情测试</h2>
+      <p>生成 5—8 道学习起点诊断题，供教师筛选、修改和导出。题目不会自动发布给学生，也不统计学生成绩。</p>
+    </div>
+    {% if outline %}
+      <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/diagnostic_probe" data-ai-generation-form data-status-target="diagnostic-v2-generation-hint" data-loading-label="AI 正在生成，请稍候..." data-loading-message="AI 正在生成课前学情测试，请稍候……生成内容为草稿，需教师审阅、修改与确认。" onsubmit="return handleAiGenerationSubmit(event, this);">
+        <input type="hidden" name="return_to" value="{{ v2_return_to }}">
+        <p id="diagnostic-v2-generation-hint" class="generation-status" role="status" aria-live="polite"></p>
+        <button class="v2-action-button v2-action-button--primary" type="submit" data-ai-generation-button>{% if draft %}重新生成课前学情测试{% else %}生成课前学情测试{% endif %}</button>
+      </form>
+    {% else %}
+      <div class="empty-v2">
+        <p>当前课次还没有知识主干。请先完成课次资料整理和知识主干确认，再生成课前学情测试。</p>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="diagnostic-boundary-v2">
+    <p>本页用于学习起点诊断，不作为正式考试成绩；系统不提供学生在线答题、不发布给学生、不统计学生成绩。教师可筛选、修改并导出题库模板后自行使用。</p>
+  </section>
+
+  <section class="diagnostic-overview-v2">
+    <div class="section-head-v2">
+      <div>
+        <span class="eyebrow-v2">结构概览</span>
+        <h2>题型与难度分布</h2>
+      </div>
+      <p>基于当前 Markdown 草稿解析，仅用于帮助教师快速检查题目结构。</p>
+    </div>
+    {% if question_blocks %}
+      <div class="diagnostic-stats-grid-v2">
+        <article class="diagnostic-stat-card-v2">
+          <h3>题型分布</h3>
+          {% for item in question_type_distribution %}
+            <div class="stat-row-v2">
+              <span>{{ item.label }}</span>
+              <div class="stat-bar-v2"><i style="width: {{ item.percent }}%"></i></div>
+              <strong>{{ item.count }}题</strong>
+              <em>{{ item.percent_display }}</em>
+            </div>
+          {% endfor %}
+        </article>
+        <article class="diagnostic-stat-card-v2">
+          <h3>难度分布</h3>
+          {% for item in difficulty_distribution %}
+            <div class="stat-row-v2">
+              <span>{{ item.label }}</span>
+              <div class="stat-bar-v2"><i style="width: {{ item.percent }}%"></i></div>
+              <strong>{{ item.count }}题</strong>
+              <em>{{ item.percent_display }}</em>
+            </div>
+          {% endfor %}
+        </article>
+      </div>
+    {% else %}
+      <div class="empty-v2">
+        <p>{% if draft %}暂未解析到题型与难度信息，可直接编辑 Markdown 草稿。{% else %}生成后展示题型与难度分布。{% endif %}</p>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="diagnostic-question-panel-v2">
+    <div class="section-head-v2">
+      <div>
+        <span class="eyebrow-v2">题卡预览</span>
+        <h2>本节习题预览</h2>
+      </div>
+      <div>
+        <p>可逐题查看、微调或删除；单题修改和删除会立即保存到当前草稿。</p>
+        {% if draft %}
+          <form method="post" action="/lessons/{{ lesson.id }}/drafts/{{ draft.id }}/export-chaoxing">
+            <input type="hidden" name="return_to" value="{{ v2_return_to }}">
+            <button class="v2-action-button v2-action-button--secondary" type="submit">导出学习通习题文件</button>
+          </form>
+          <p class="diagnostic-export-note-v2">将当前习题整理为学习通题库导入用 xlsx 文件，不会自动发布到学习通。</p>
+        {% endif %}
+      </div>
+    </div>
+    {% if question_blocks %}
+      <div class="diagnostic-question-list-v2">
+        {% for block in question_blocks %}
+          <article class="diagnostic-question-card-v2" data-diagnostic-question-card>
+            <textarea hidden data-question-raw>{{ block.raw_markdown }}</textarea>
+            <div class="diagnostic-question-head-v2">
+              <span class="question-index-v2">第 {{ block.index }} 题</span>
+              <span class="question-chip-v2">{{ block.question.question_type or "题型不详" }}</span>
+              <span class="question-chip-v2">{{ block.question.difficulty or "难度不详" }}</span>
+            </div>
+            <h3 data-question-prompt>{{ block.question.prompt or "题干未解析" }}</h3>
+            {% if block.question.options %}
+              <ul class="question-options-v2">
+                {% for option in block.question.options %}
+                  <li>{{ option }}</li>
+                {% endfor %}
+              </ul>
+            {% endif %}
+            <dl class="question-meta-v2">
+              <div><dt>参考答案</dt><dd>{{ block.question.answer or "不详" }}</dd></div>
+              <div><dt>简要解析</dt><dd>{{ block.question.explanation or "不详" }}</dd></div>
+              <div><dt>诊断点 / 知识点</dt><dd>{{ block.question.diagnosis_point or "不详" }}</dd></div>
+            </dl>
+            <details class="question-edit-v2">
+              <summary>编辑本题</summary>
+              <textarea data-question-editor rows="8">{{ block.raw_markdown }}</textarea>
+              <div class="diagnostic-card-actions-v2">
+                <button type="button" class="v2-action-button v2-action-button--secondary" data-apply-question-edit>保存本题修改</button>
+                <button type="button" class="danger-button" data-delete-question>删除本题</button>
+              </div>
+            </details>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-v2">
+        <p>{% if draft %}当前草稿未能解析成题卡，可直接在完整 Markdown 编辑区修改。{% else %}当前还没有课前学情测试草稿。{% endif %}</p>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="diagnostic-editor-v2">
+    {% if draft %}
+      <p class="diagnostic-editor-help-v2">如果题目解析不完整，或需要批量调整原文，可展开编辑完整 Markdown。</p>
+      <details class="diagnostic-editor-details-v2" {% if not question_blocks %}open{% endif %}>
+        <summary>高级编辑：查看完整 Markdown 草稿</summary>
+        <div class="diagnostic-editor-card-v2">
+          <form method="post" action="/lessons/{{ lesson.id }}/drafts/{{ draft.id }}/save" data-diagnostic-save-form>
+            <input type="hidden" name="return_to" value="{{ v2_return_to }}">
+            <label for="diagnostic-title-v2">标题</label>
+            <input id="diagnostic-title-v2" name="title" type="text" value="{{ draft.title }}">
+            <label for="diagnostic-content-v2">草稿内容</label>
+            <textarea id="diagnostic-content-v2" name="content" rows="18" data-diagnostic-full-content>{{ draft.content }}</textarea>
+            <button class="v2-action-button v2-action-button--primary" type="submit">保存完整草稿</button>
+          </form>
+        </div>
+      </details>
+    {% else %}
+      <div class="empty-v2">
+        <p>生成课前学情测试后，可在高级编辑区查看完整 Markdown 草稿并保存完整草稿。</p>
+      </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

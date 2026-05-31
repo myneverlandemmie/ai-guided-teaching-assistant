@@ -53,6 +53,13 @@ async def test_courses_v2_page_is_accessible_and_uses_real_courses(tmp_path: Pat
         assert "AI 导学工作台 · 课程中心" in response.text
         assert "智学导评 V0.2" in response.text
         assert "教师 AI 备课工作台" in response.text
+        assert "课程资料整理" in response.text
+        assert "整理资料，形成知识主干与备课参考" in response.text
+        assert "课前学情测试" in response.text
+        assert "了解学生课前基础" in response.text
+        assert "学生导学案" in response.text
+        assert "形成学生学习单与任务包" in response.text
+        assert "导入课次资料" not in response.text
         assert "传感器应用基础" in response.text
         assert "新建课程" in response.text
         assert 'action="/courses/create"' in response.text

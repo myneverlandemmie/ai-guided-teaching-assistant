@@ -46,6 +46,8 @@ from app.services.ai.lesson_draft_ai_service import (
 )
 from app.services.ai.lesson_draft_service import (
     DRAFT_TYPE_LABELS,
+    DiagnosticQuestionBlock,
+    parse_diagnostic_probe_question_blocks,
     write_chaoxing_template_xlsx,
 )
 from app.services.ai.session_key_store import (
@@ -333,6 +335,51 @@ def _safe_export_filename(filename: str | None, suffix: str) -> str | None:
     if basename != filename or "\\" in filename or not basename.endswith(suffix):
         return None
     return basename
+
+
+def _append_query_param(path: str, key: str, value: str) -> str:
+    """向站内路径追加简单查询参数。"""
+
+    separator = "&" if "?" in path else "?"
+    return f"{path}{separator}{key}={quote(value, safe='')}"
+
+
+def _distribution(items: list[str]) -> list[dict[str, object]]:
+    """生成页面使用的轻量分布数据。"""
+
+    counts: dict[str, int] = {}
+    for item in items:
+        label = item.strip() or "不详"
+        if label in {"基础"}:
+            label = "易 / 基础"
+        elif label in {"中等"}:
+            label = "中 / 中等"
+        elif label in {"提高"}:
+            label = "难 / 提高"
+        counts[label] = counts.get(label, 0) + 1
+    total = sum(counts.values()) or 1
+    return [
+        {
+            "label": label,
+            "count": count,
+            "percent": round(count / total * 100),
+            "percent_display": f"{count / total * 100:.1f}%",
+        }
+        for label, count in counts.items()
+    ]
+
+
+def _diagnostic_probe_view_context(draft: LessonDraft | None) -> dict[str, object]:
+    """构造课前学情测试 V2 的题卡与结构概览。"""
+
+    question_blocks: list[DiagnosticQuestionBlock] = []
+    if draft is not None:
+        question_blocks = parse_diagnostic_probe_question_blocks(draft.content)
+    return {
+        "question_blocks": question_blocks,
+        "question_type_distribution": _distribution([block.question.question_type for block in question_blocks]),
+        "difficulty_distribution": _distribution([block.question.difficulty for block in question_blocks]),
+    }
 
 
 def get_or_create_demo_course(session: Session) -> Course:
@@ -800,6 +847,44 @@ async def show_lesson_materials_outline_v2(
     )
 
 
+@app.get("/ui-v2/lessons/{lesson_id}/diagnostic-probe", response_class=HTMLResponse)
+async def show_diagnostic_probe_v2(
+    lesson_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """课前学情测试 V2 preview。"""
+
+    lesson = db.scalar(
+        select(Lesson)
+        .options(selectinload(Lesson.course))
+        .where(Lesson.id == lesson_id)
+    )
+    if lesson is None:
+        raise HTTPException(status_code=404, detail="课次不存在")
+
+    draft = _get_lesson_draft_by_type(db, lesson.id, "diagnostic_probe")
+    chaoxing_filename = _safe_export_filename(request.query_params.get("chaoxing_file"), ".xlsx")
+    fallback_message = (
+        "DeepSeek 响应较慢、调用失败或当前未设置 API Key，已回退为本地结构化草稿。你可以稍后重试，或减少材料后再生成。"
+        if request.query_params.get("draft_fallback") == "1"
+        else None
+    )
+    return templates.TemplateResponse(
+        request,
+        "diagnostic_probe_v2.html",
+        {
+            "lesson": lesson,
+            "outline": _get_latest_knowledge_outline(db, lesson.id),
+            "draft": draft,
+            "draft_status_labels": LESSON_DRAFT_STATUS_LABELS,
+            "chaoxing_export_url": f"/exports/chaoxing/{chaoxing_filename}" if chaoxing_filename else None,
+            "fallback_message": fallback_message,
+            **_diagnostic_probe_view_context(draft),
+        },
+    )
+
+
 def _lesson_material_context(db: Session, lesson: Lesson, error_message: str | None = None) -> dict[str, object]:
     """构造课次材料页面上下文。"""
 
@@ -1176,6 +1261,7 @@ async def generate_tiered_lesson_draft_route(
     lesson_id: int,
     draft_type: str,
     request: Request,
+    return_to: str = Form(""),
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
     """按需生成或更新单个导学草稿。"""
@@ -1189,12 +1275,18 @@ async def generate_tiered_lesson_draft_route(
 
     outline = _get_latest_knowledge_outline(db, lesson.id)
     if outline is None:
-        return RedirectResponse(url=f"/lessons/{lesson.id}/drafts", status_code=303)
+        return RedirectResponse(
+            url=sanitize_next_path(return_to) or f"/lessons/{lesson.id}/drafts",
+            status_code=303,
+        )
 
     if draft_type in {"guide_mid", "guide_high"} and db.scalar(
         select(LessonDraft).where(LessonDraft.lesson_id == lesson.id, LessonDraft.draft_type == "guide_low")
     ) is None:
-        return RedirectResponse(url=f"/lessons/{lesson.id}/drafts", status_code=303)
+        return RedirectResponse(
+            url=sanitize_next_path(return_to) or f"/lessons/{lesson.id}/drafts",
+            status_code=303,
+        )
 
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
     draft, used_fallback = await run_in_threadpool(
@@ -1207,8 +1299,10 @@ async def generate_tiered_lesson_draft_route(
     )
     _upsert_lesson_drafts(db, lesson, outline, [draft])
     db.commit()
-    suffix = "?draft_fallback=1" if used_fallback else ""
-    return RedirectResponse(url=f"/lessons/{lesson.id}/drafts{suffix}", status_code=303)
+    redirect_to = sanitize_next_path(return_to) or f"/lessons/{lesson.id}/drafts"
+    if used_fallback:
+        redirect_to = _append_query_param(redirect_to, "draft_fallback", "1")
+    return RedirectResponse(url=redirect_to, status_code=303)
 
 
 @app.post("/lessons/{lesson_id}/drafts/{draft_id}/save")
@@ -1237,6 +1331,7 @@ async def save_lesson_draft(
 async def export_diagnostic_probe_to_chaoxing(
     lesson_id: int,
     draft_id: int,
+    return_to: str = Form(""),
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
     """将导学案前测导出为学习通题库导入 xlsx。"""
@@ -1253,7 +1348,8 @@ async def export_diagnostic_probe_to_chaoxing(
     filename = f"lesson_{lesson.id}_{lesson_part}_diagnostic_probe.xlsx"
     output_path = CHAOXING_EXPORT_DIR / filename
     write_chaoxing_template_xlsx(lesson, draft, output_path)
-    return RedirectResponse(url=f"/lessons/{lesson.id}/drafts?chaoxing_file={filename}", status_code=303)
+    redirect_to = sanitize_next_path(return_to) or f"/lessons/{lesson.id}/drafts"
+    return RedirectResponse(url=_append_query_param(redirect_to, "chaoxing_file", filename), status_code=303)
 
 
 @app.get("/exports/chaoxing/{filename}")

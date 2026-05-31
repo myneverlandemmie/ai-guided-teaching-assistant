@@ -65,6 +65,15 @@ class DiagnosticQuestion:
     options: list[str]
 
 
+@dataclass(frozen=True)
+class DiagnosticQuestionBlock:
+    """带原始 Markdown 块的课前学情测试题目。"""
+
+    index: int
+    question: DiagnosticQuestion
+    raw_markdown: str
+
+
 def _lesson_name(lesson: Lesson) -> str:
     """生成适合页面展示的课次名称。"""
 
@@ -443,53 +452,83 @@ def generate_tiered_guide_draft(lesson: Lesson, outline: KnowledgeOutline, draft
 def parse_diagnostic_probe_questions(content: str) -> list[DiagnosticQuestion]:
     """从课前学情测试 Markdown 中解析题目，供学习通模板导出使用。"""
 
-    questions: list[DiagnosticQuestion] = []
+    return [block.question for block in parse_diagnostic_probe_question_blocks(content)]
+
+
+def parse_diagnostic_probe_question_blocks(content: str) -> list[DiagnosticQuestionBlock]:
+    """解析课前学情测试题块，保留每题 Markdown 原文供 V2 页面轻量编辑。"""
+
+    question_blocks: list[DiagnosticQuestionBlock] = []
+    for heading, block, raw_markdown in _split_diagnostic_probe_blocks(content):
+        question = _parse_diagnostic_question(heading, block)
+        if question is None:
+            continue
+        question_blocks.append(
+            DiagnosticQuestionBlock(
+                index=len(question_blocks) + 1,
+                question=question,
+                raw_markdown=raw_markdown.strip(),
+            )
+        )
+    return question_blocks
+
+
+def _split_diagnostic_probe_blocks(content: str) -> list[tuple[str, str, str]]:
+    """按题目标题切分前测 Markdown。"""
+
     question_pattern = re.compile(
         r"(?m)^[ \t]*(?:#{2,4}[ \t]*)?(?:\*\*)?[ \t]*(?:题目|第)[ \t]*(\d+)[ \t]*(?:题)?(?:[：:.\、-].*)?[ \t]*(?:\*\*)?[ \t]*$"
     )
     matches = list(question_pattern.finditer(content))
-    blocks: list[tuple[str, str]] = []
+    blocks: list[tuple[str, str, str]] = []
     for index, matched in enumerate(matches):
         start = matched.end()
         end = matches[index + 1].start() if index + 1 < len(matches) else len(content)
-        blocks.append((matched.group(0), content[start:end]))
+        raw_markdown = content[matched.start():end]
+        blocks.append((matched.group(0), content[start:end], raw_markdown))
 
     # 兼容旧的严格格式，避免历史草稿无法导出。
     if not blocks:
-        strict_blocks = re.split(r"(?m)^###\s*题目\s*\d+\s*$", content)
-        blocks = [("", block) for block in strict_blocks[1:]]
+        strict_pattern = re.compile(r"(?m)^###\s*题目\s*\d+\s*$")
+        strict_matches = list(strict_pattern.finditer(content))
+        for index, matched in enumerate(strict_matches):
+            start = matched.end()
+            end = strict_matches[index + 1].start() if index + 1 < len(strict_matches) else len(content)
+            raw_markdown = content[matched.start():end]
+            blocks.append((matched.group(0), content[start:end], raw_markdown))
+    return blocks
 
-    for heading, block in blocks:
-        data: dict[str, str] = {}
-        option_lines: list[str] = []
-        for line in block.splitlines():
-            stripped = line.strip().strip("*")
-            matched = re.match(r"^(?:[-*]\s*)?([^：:]{1,12})[：:]\s*(.*)$", stripped)
-            if matched:
-                key = _normalize_question_field(matched.group(1).strip())
-                data[key] = matched.group(2).strip()
-                continue
-            if re.match(r"^[A-H][.．、]\s*.+", stripped):
-                option_lines.append(stripped)
 
-        question_type = data.get("题型", "")
-        prompt = data.get("题干", "") or _prompt_from_question_heading(heading)
-        answer = data.get("参考答案", "")
-        if not question_type or not prompt:
+def _parse_diagnostic_question(heading: str, block: str) -> DiagnosticQuestion | None:
+    """从单题 Markdown 块中解析题型、题干、答案等字段。"""
+
+    data: dict[str, str] = {}
+    option_lines: list[str] = []
+    for line in block.splitlines():
+        stripped = line.strip().strip("*")
+        matched = re.match(r"^(?:[-*]\s*)?([^：:]{1,12})[：:]\s*(.*)$", stripped)
+        if matched:
+            key = _normalize_question_field(matched.group(1).strip())
+            data[key] = matched.group(2).strip()
             continue
-        options = _parse_options(data.get("选项", "") or "；".join(option_lines))
-        questions.append(
-            DiagnosticQuestion(
-                question_type=question_type,
-                prompt=prompt,
-                answer=answer,
-                explanation=data.get("简短解析", ""),
-                diagnosis_point=data.get("诊断点", ""),
-                difficulty=data.get("难度", ""),
-                options=options,
-            )
-        )
-    return questions
+        if re.match(r"^[A-H][.．、]\s*.+", stripped):
+            option_lines.append(stripped)
+
+    question_type = data.get("题型", "")
+    prompt = data.get("题干", "") or _prompt_from_question_heading(heading)
+    answer = data.get("参考答案", "")
+    if not question_type or not prompt:
+        return None
+    options = _parse_options(data.get("选项", "") or "；".join(option_lines))
+    return DiagnosticQuestion(
+        question_type=question_type,
+        prompt=prompt,
+        answer=answer,
+        explanation=data.get("简短解析", ""),
+        diagnosis_point=data.get("诊断点", ""),
+        difficulty=data.get("难度", ""),
+        options=options,
+    )
 
 
 def _normalize_question_field(field_name: str) -> str:

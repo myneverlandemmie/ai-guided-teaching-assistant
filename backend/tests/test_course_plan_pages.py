@@ -533,7 +533,8 @@ async def test_lessons_list_links_to_v2_materials_outline(tmp_path: Path) -> Non
         assert response.status_code == 200
         assert "查看详情" not in response.text
         assert "作业提示" not in response.text
-        assert "资料与主干" in response.text
+        assert "课程资料整理" in response.text
+        assert "资料与主干" not in response.text
         assert "资料主干" not in response.text
         assert "学情测试" in response.text
         assert "导学案" in response.text

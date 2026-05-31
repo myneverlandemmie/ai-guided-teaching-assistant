@@ -120,7 +120,7 @@ async def test_materials_outline_v2_shows_teaching_prep_reference_entry(tmp_path
         assert "生成备课参考建议" in response.text
         assert "供教师选择性参考" in response.text
         assert "本建议参考公开课、汇报课、教学能力比赛等较高标准材料的常见结构" in response.text
-        assert "整理资料、生成知识主干，并可获取备课参考建议。" in response.text
+        assert "整理资料，形成知识主干与备课参考。" in response.text
         assert "完成资料整理、知识主干确认和备课参考建议查看后" in response.text
         assert 'data-status-target="teaching-prep-reference-generation-hint"' in response.text
         assert "AI 正在生成备课参考建议" in response.text

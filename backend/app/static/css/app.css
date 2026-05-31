@@ -1458,3 +1458,316 @@ input[type="file"] { margin: .75rem 0; }
     grid-template-columns: 1fr;
   }
 }
+
+/* Diagnostic probe V2 preview page. */
+.diagnostic-probe-v2 {
+  --diagnostic-card: #ffffff;
+}
+
+.diagnostic-hero-v2,
+.diagnostic-generate-panel-v2,
+.diagnostic-boundary-v2,
+.diagnostic-overview-v2,
+.diagnostic-question-panel-v2,
+.diagnostic-editor-v2 {
+  margin-top: 1rem;
+  padding: 1.45rem;
+  border-radius: 26px;
+  background: var(--diagnostic-card);
+  border: 1px solid var(--ui-v2-border);
+  box-shadow: 0 12px 34px rgba(16, 42, 42, .055);
+}
+
+.diagnostic-hero-v2 {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.25rem;
+  align-items: flex-start;
+  padding: 1.85rem;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 90% 18%, rgba(0, 124, 120, .09), transparent 28%),
+    linear-gradient(135deg, #ffffff 0%, #f9fcff 100%);
+}
+
+.diagnostic-hero-copy-v2 h1 {
+  margin: .65rem 0 .5rem;
+  font-size: clamp(2rem, 3vw, 2.75rem);
+  letter-spacing: -.03em;
+}
+
+.diagnostic-hero-copy-v2 p {
+  max-width: 760px;
+  color: var(--ui-v2-muted);
+  line-height: 1.75;
+  margin: .35rem 0;
+}
+
+.diagnostic-hero-actions-v2,
+.diagnostic-nav-v2,
+.diagnostic-editor-actions-v2,
+.diagnostic-card-actions-v2 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .6rem;
+  align-items: center;
+}
+
+.diagnostic-hero-actions-v2 {
+  justify-content: flex-end;
+  min-width: 250px;
+}
+
+.diagnostic-nav-v2 {
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+.diagnostic-generate-panel-v2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1.25rem;
+  align-items: center;
+}
+
+.diagnostic-generate-panel-v2 h2,
+.diagnostic-overview-v2 h2,
+.diagnostic-question-panel-v2 h2,
+.diagnostic-editor-v2 h2 {
+  margin: .42rem 0 .25rem;
+}
+
+.diagnostic-generate-panel-v2 p,
+.diagnostic-overview-v2 p,
+.diagnostic-question-panel-v2 p,
+.diagnostic-editor-v2 p {
+  color: var(--ui-v2-muted);
+  line-height: 1.65;
+}
+
+.diagnostic-probe-v2 .generation-status {
+  display: none;
+  border-radius: 12px;
+  padding: .58rem .68rem;
+  line-height: 1.55;
+  background: #edf6ff;
+  border: 1px solid #cbdff5;
+  color: #1e4775;
+  font-size: .9rem;
+}
+
+.diagnostic-boundary-v2 {
+  background: var(--ui-v2-warm);
+  border-color: #f4dfb7;
+  box-shadow: none;
+}
+
+.diagnostic-boundary-v2 p {
+  margin: 0;
+  color: #7a4a12;
+  line-height: 1.65;
+}
+
+.diagnostic-stats-grid-v2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.diagnostic-stat-card-v2,
+.diagnostic-question-card-v2,
+.diagnostic-editor-card-v2 {
+  border: 1px solid var(--ui-v2-border);
+  border-radius: 22px;
+  padding: 1rem;
+  background: #fbfdff;
+}
+
+.diagnostic-stat-card-v2 h3,
+.diagnostic-question-card-v2 h3 {
+  margin: 0 0 .75rem;
+}
+
+.stat-row-v2 {
+  display: grid;
+  grid-template-columns: 6rem minmax(0, 1fr) 3rem 4rem;
+  gap: .65rem;
+  align-items: center;
+  margin: .62rem 0;
+  color: var(--ui-v2-muted);
+  font-size: .92rem;
+}
+
+.stat-row-v2 em {
+  color: var(--ui-v2-brand-dark);
+  font-style: normal;
+  font-weight: 800;
+  text-align: right;
+}
+
+.stat-bar-v2 {
+  height: .55rem;
+  border-radius: 999px;
+  background: #edf2f4;
+  overflow: hidden;
+}
+
+.stat-bar-v2 i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ui-v2-brand);
+}
+
+.diagnostic-question-list-v2 {
+  display: grid;
+  gap: 1rem;
+}
+
+.diagnostic-question-head-v2 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+  align-items: center;
+  margin-bottom: .7rem;
+}
+
+.question-index-v2,
+.question-chip-v2 {
+  display: inline-flex;
+  align-items: center;
+  padding: .32rem .58rem;
+  border-radius: 999px;
+  font-size: .82rem;
+  font-weight: 800;
+}
+
+.question-index-v2 {
+  background: var(--ui-v2-brand);
+  color: #fff;
+}
+
+.question-chip-v2 {
+  background: var(--ui-v2-soft);
+  color: var(--ui-v2-brand-dark);
+}
+
+.question-options-v2 {
+  display: grid;
+  gap: .35rem;
+  margin: .75rem 0;
+  padding-left: 1.2rem;
+  color: var(--ui-v2-muted);
+}
+
+.question-meta-v2 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .75rem;
+  margin: .85rem 0;
+}
+
+.question-meta-v2 div {
+  padding: .72rem;
+  border-radius: 16px;
+  background: #fff;
+  border: 1px solid var(--ui-v2-border);
+}
+
+.question-meta-v2 dt {
+  color: var(--ui-v2-muted);
+  font-size: .82rem;
+  font-weight: 800;
+  margin-bottom: .25rem;
+}
+
+.question-meta-v2 dd {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.question-edit-v2 {
+  margin-top: .8rem;
+  border-top: 1px solid var(--ui-v2-border);
+  padding-top: .8rem;
+}
+
+.question-edit-v2 summary {
+  cursor: pointer;
+  color: var(--ui-v2-brand-dark);
+  font-weight: 800;
+}
+
+.question-edit-v2 textarea,
+.diagnostic-editor-card-v2 textarea {
+  margin-top: .75rem;
+  min-height: 12rem;
+  line-height: 1.7;
+  resize: vertical;
+  background: #fff;
+}
+
+.diagnostic-editor-card-v2 form {
+  display: grid;
+  gap: .75rem;
+}
+
+.diagnostic-editor-card-v2 label {
+  font-size: .86rem;
+  font-weight: 800;
+  color: var(--ui-v2-muted);
+}
+
+.diagnostic-editor-card-v2 textarea {
+  min-height: 24rem;
+}
+
+.diagnostic-editor-actions-v2 {
+  justify-content: flex-end;
+  margin-bottom: .85rem;
+}
+
+.diagnostic-export-note-v2 {
+  margin: .55rem 0 0;
+  color: var(--ui-v2-muted);
+  font-size: .9rem;
+  line-height: 1.55;
+}
+
+.diagnostic-editor-details-v2 {
+  border: 1px solid var(--ui-v2-border);
+  border-radius: 22px;
+  background: #fbfdff;
+  padding: 1rem;
+}
+
+.diagnostic-editor-details-v2 summary {
+  cursor: pointer;
+  color: var(--ui-v2-brand-dark);
+  font-weight: 900;
+}
+
+.diagnostic-editor-help-v2 {
+  margin: .55rem 0 0;
+  color: var(--ui-v2-muted);
+  line-height: 1.65;
+}
+
+@media (max-width: 900px) {
+  .diagnostic-hero-v2,
+  .diagnostic-generate-panel-v2 {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+  .diagnostic-hero-actions-v2,
+  .diagnostic-nav-v2 {
+    justify-content: flex-start;
+  }
+  .diagnostic-stats-grid-v2,
+  .question-meta-v2 {
+    grid-template-columns: 1fr;
+  }
+  .stat-row-v2 {
+    grid-template-columns: 5rem minmax(0, 1fr) 3rem 4rem;
+  }
+}

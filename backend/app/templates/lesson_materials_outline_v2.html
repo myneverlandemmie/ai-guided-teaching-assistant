@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}课次资料与知识主干{% endblock %}
+{% block title %}课程资料整理{% endblock %}
 {% block top_nav %}{% endblock %}
 {% block content %}
 <div class="ui-v2-shell lesson-materials-v2">
@@ -14,7 +14,7 @@
       <span class="v2-breadcrumb-separator">|</span>
       <span>正式课次</span>
       <span class="v2-breadcrumb-separator">|</span>
-      <span>课次资料与知识主干</span>
+      <span>课程资料整理</span>
     </div>
     <a class="v2-topbar-link" href="/ai/settings">AI 设置</a>
   </nav>
@@ -22,8 +22,8 @@
   <section class="materials-hero-v2">
     <div class="materials-hero-copy-v2">
       <span class="eyebrow-v2">课次工作台</span>
-      <h1>课次资料与知识主干</h1>
-      <p>整理本课资料，生成知识主干，为课前学情测试与学生导学案提供依据。</p>
+      <h1>课程资料整理</h1>
+      <p>整理本课资料，形成知识主干与备课参考，为课前学情测试和学生导学案提供依据。</p>
       <div class="lesson-pills-v2" aria-label="课次信息">
         <span>课程：{{ lesson.course.title if lesson.course else "未设置" }}</span>
         <span>课题：{{ lesson.title }}</span>
@@ -47,18 +47,18 @@
     </article>
     <article class="flow-step-v2 is-current">
       <span>2</span>
-      <strong>课次资料与知识主干</strong>
-      <p>整理资料、生成知识主干，并可获取备课参考建议。</p>
+      <strong>课程资料整理</strong>
+      <p>整理资料，形成知识主干与备课参考。</p>
     </article>
     <article class="flow-step-v2">
       <span>3</span>
       <strong>课前学情测试</strong>
-      <p>下一阶段生成学习起点诊断。</p>
+      <p>了解学生课前基础。</p>
     </article>
     <article class="flow-step-v2">
       <span>4</span>
       <strong>学生导学案</strong>
-      <p>生成学生学习单与任务包。</p>
+      <p>形成学生学习单与任务包。</p>
     </article>
   </section>
 
@@ -68,7 +68,7 @@
       <p>完成资料整理、知识主干确认和备课参考建议查看后，可继续生成课前学情测试和学生导学案。</p>
     </div>
     <div class="materials-next-actions-v2">
-      <a class="v2-action-button v2-action-button--secondary" href="/lessons/{{ lesson.id }}/drafts">进入课前学情测试</a>
+      <a class="v2-action-button v2-action-button--secondary" href="/ui-v2/lessons/{{ lesson.id }}/diagnostic-probe">进入课前学情测试</a>
       <a class="v2-action-button v2-action-button--secondary" href="/lessons/{{ lesson.id }}/drafts">进入学生导学案</a>
     </div>
   </section>

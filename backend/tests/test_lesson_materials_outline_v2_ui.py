@@ -100,7 +100,8 @@ async def test_lessons_and_detail_pages_link_to_materials_outline_v2(tmp_path: P
         assert "查看详情" not in lessons_response.text
         assert "作业提示" not in lessons_response.text
         assert "教学内容摘要" not in lessons_response.text
-        assert "资料与主干" in lessons_response.text
+        assert "课程资料整理" in lessons_response.text
+        assert "资料与主干" not in lessons_response.text
         assert "资料主干" not in lessons_response.text
         assert "学情测试" in lessons_response.text
         assert "导学案" in lessons_response.text
@@ -178,7 +179,8 @@ async def test_lesson_materials_outline_v2_page_shows_materials_and_forms(tmp_pa
         response = await client.get(f"/ui-v2/lessons/{lesson_id}/materials-outline")
 
         assert response.status_code == 200
-        assert "课次资料与知识主干" in response.text
+        assert "课程资料整理" in response.text
+        assert "课次资料与知识主干" not in response.text
         assert "传感器应用基础" in response.text
         assert "光敏传感器实验" in response.text
         assert "周次：3" in response.text
@@ -208,6 +210,10 @@ async def test_lesson_materials_outline_v2_page_shows_materials_and_forms(tmp_pa
         assert 'data-status-target="outline-v2-generation-hint"' in response.text
         assert "智学导评 V0.2" in response.text
         assert "|" in response.text
+        assert "课程资料整理" in response.text
+        assert "整理资料，形成知识主干与备课参考" in response.text
+        assert "了解学生课前基础" in response.text
+        assert "形成学生学习单与任务包" in response.text
         assert "返回课程中心 V2" not in response.text
         assert "返回课程中心" in response.text
         assert "返回正式课次列表" in response.text
