@@ -484,12 +484,21 @@ input[type="file"] { margin: .75rem 0; }
   width: 100%;
 }
 
-.ai-settings-form-actions-v2,
-.ai-settings-clear-form-v2 {
+.ai-settings-actions-v2 {
   display: flex;
   flex-wrap: wrap;
   gap: .75rem;
   align-items: center;
+  margin-top: 1rem;
+}
+
+.ai-settings-actions-v2 form {
+  margin: 0;
+}
+
+.ai-settings-actions-v2 button {
+  min-height: 2.5rem;
+  padding: .62rem 1rem;
 }
 
 .course-center-v2 {

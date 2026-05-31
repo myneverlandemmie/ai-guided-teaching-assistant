@@ -1450,6 +1450,8 @@ async def test_ai_settings_can_set_mask_and_clear_session_key(tmp_path: Path) ->
         assert 'href="/ui-v2/courses"' in page_response.text
         assert "课程列表" not in page_response.text
         assert "ai-settings-form-v2" in page_response.text
+        assert "ai-settings-actions-v2" in page_response.text
+        assert 'form="ai-settings-save-form"' in page_response.text
         assert "ui-v2-field" in page_response.text
         assert "https://api-docs.deepseek.com/zh-cn/quick_start/pricing" in page_response.text
         assert "DeepSeek 官方模型与价格" in page_response.text

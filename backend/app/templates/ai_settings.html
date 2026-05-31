@@ -37,7 +37,7 @@
 
 <section class="card">
   <h2>设置当前会话 Key 和模型</h2>
-  <form class="ai-settings-form-v2" method="post" action="/ai/settings">
+  <form id="ai-settings-save-form" class="ai-settings-form-v2" method="post" action="/ai/settings">
     {% if next_path %}
       <input type="hidden" name="next" value="{{ next_path }}">
       <p>保存后将返回：{{ next_path }}</p>
@@ -56,11 +56,13 @@
         {% endfor %}
       </select>
     </div>
-    <div class="ai-settings-form-actions-v2"><button type="submit">保存到当前会话</button></div>
   </form>
-  <form class="ai-settings-clear-form-v2" method="post" action="/ai/settings/clear">
-    <button type="submit">清除当前 Key</button>
-  </form>
+  <div class="ai-settings-actions-v2">
+    <button type="submit" form="ai-settings-save-form">保存到当前会话</button>
+    <form class="ai-settings-clear-form-v2" method="post" action="/ai/settings/clear">
+      <button type="submit">清除当前 Key</button>
+    </form>
+  </div>
 </section>
 
 <section class="card">
