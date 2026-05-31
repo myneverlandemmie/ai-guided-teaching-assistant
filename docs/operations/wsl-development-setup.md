@@ -23,13 +23,11 @@ mkdir -p ~/projects
 cd ~/projects
 ```
 
-解压项目包后进入目录：
+获取项目代码后进入目录：
 
 ```bash
-cd ~/projects/ai-guided-sql-assessment
-git init
-git add .
-git commit -m "chore: initialize bilingual project structure"
+git clone https://github.com/myneverlandemmie/ai-guided-teaching-assistant
+cd ai-guided-teaching-assistant
 ```
 
 ## Windows 浏览器测试 / Test from Windows Browser
@@ -38,11 +36,11 @@ git commit -m "chore: initialize bilingual project structure"
 
 ```bash
 cd backend
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+AI_PROVIDER=deepseek PYTHONPATH=. ../.venv/bin/uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 在 Windows 浏览器中打开：
 
 ```text
-http://127.0.0.1:8000
+http://127.0.0.1:8000/ui-v2/courses
 ```

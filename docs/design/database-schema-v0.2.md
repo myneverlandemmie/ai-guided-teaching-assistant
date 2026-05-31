@@ -2,19 +2,21 @@
 
 ## 1. Purpose / 文档目的
 
-本文档用于说明“智学导评 V0.2”的数据库结构设计，为后续 FastAPI、SQLAlchemy、课程计划导入、AI 生成、SQL 自动批阅和教师复核功能提供数据基础。
+本文档用于说明“智学导评 V0.2”的数据库结构设计，为后续 FastAPI、SQLAlchemy、课程计划导入、AI 生成、教师端导学案流程和作业批阅预留能力提供数据基础。
 
-This document defines the V0.2 database schema for the AI Guided SQL Assessment Platform.
+This document defines the V0.2 database schema for the AI-guided teaching assistant.
+
+说明：本文包含部分面向后续版本的表结构预留。当前已落地系统主线是课程、课次、资料、知识主干、备课参考建议、课前学情测试和学生导学案；作业批阅、学生端和学习总结不是当前已实现功能。
 
 ## 2. Design Principles / 设计原则
 
 V0.2 数据库设计遵循以下原则：
 
-1. 教学流程优先，先服务课程计划导入、课次管理、导学案生成、SQL 作业批阅和学习总结。
-2. 保留教师最终控制权，AI 生成内容和自动批阅结果都必须可编辑、可确认、可追溯。
+1. 教学流程优先，先服务课程计划导入、课次管理、知识主干、备课参考建议、课前学情测试和导学案生成。
+2. 保留教师最终控制权，AI 生成内容和未来可能扩展的作业批阅结果都必须可编辑、可确认、可追溯。
 3. 支持三层使用模式，包括云端演示、Windows 单机体验和 Linux / 私有服务器部署。
 4. V0.2 可使用 MySQL 作为正式部署数据库，同时保留 SQLite 兼容演示模式。
-5. 不在 V0.2 中实现完整 Python 批阅和 OCR 拍照纠错，但表结构应避免阻碍后续扩展。
+5. 不在当前 V0.2 主流程中实现作业批阅、完整 Python 批阅和 OCR 拍照纠错，但表结构应避免阻碍后续扩展。
 6. 所有涉及学生数据的表都应使用演示数据或私有部署数据，不在公开仓库中存放真实学生信息。
 
 ## 3. Database Modes / 数据库使用模式
@@ -41,7 +43,7 @@ V0.2 数据库设计遵循以下原则：
 - 内置演示班级；
 - 内置演示学生；
 - Mock AI 模式；
-- SQLite 兼容 SQL 批阅模式。
+- 本地演示数据。
 
 ### 3.3 Private Server Deployment Mode / 私有服务器部署模式
 
@@ -71,10 +73,10 @@ V0.2 主要包含以下数据实体：
 | knowledge_outlines | 知识主干 |
 | quizzes | 小测题 |
 | guidebooks | 分层导学案 |
-| assignments | 作业 |
-| submissions | 学生提交 |
-| grading_results | 批阅结果 |
-| learning_summaries | 学习总结 |
+| assignments | 作业预留 |
+| submissions | 提交预留 |
+| grading_results | 批阅结果预留 |
+| learning_summaries | 学习总结预留 |
 | ai_generation_logs | AI 生成记录 |
 
 当前代码已经落地的模型包括：
@@ -108,8 +110,8 @@ V0.2 主要包含以下数据实体：
 
 说明：
 
-- V0.2 至少支持 teacher 和 student 两类角色。
-- 演示账号可以使用 `demo_teacher`、`demo_student_01` 等形式。
+- 该表为后续登录权限预留；当前代码没有完整登录权限体系。
+- 后续如实现账号体系，可支持 teacher 和 student 等角色。
 - 公开仓库中不得出现真实学生账号和真实密码。
 
 ## 5.2 classes / 班级表
@@ -128,8 +130,8 @@ V0.2 主要包含以下数据实体：
 
 说明：
 
-- V0.2 默认创建一个“演示班级”。
-- 正常功能预留教师创建真实班级的能力。
+- 该表为后续班级管理预留；当前代码没有学生端和完整班级管理。
+- 正常功能可预留教师创建真实班级的能力。
 - 项目方演示服务器只使用演示班级，不承接外部真实班级大规模试用。
 
 ## 5.3 class_members / 班级成员表
@@ -407,13 +409,13 @@ V0.2 推荐策略：
 
 说明：
 
-- V0.2 可以先支持每名学生一次提交。
+- 该表为后续提交功能预留；当前代码没有学生端提交。
 - 后续可扩展多次提交与提交历史。
-- 学生提交的 SQL 不应直接拼接到业务数据库中执行，应通过批阅引擎隔离执行。
+- 后续如扩展数据库类作业，提交内容不应直接拼接到业务数据库中执行，应通过隔离环境处理。
 
 ## 5.14 grading_results / 批阅结果表
 
-用于保存系统自动批阅和教师复核结果。
+用于保存后续规则测试草稿和教师复核结果。
 
 | 字段名 | 类型建议 | 含义 |
 |---|---|---|
@@ -544,7 +546,7 @@ V0.2 为了保证半个月内可落地，采用以下简化策略：
 4. AI 生成内容先通过文本字段保存，不做复杂富文本结构。
 5. Windows 单机体验模式可使用 SQLite。
 6. SQL 批阅先覆盖 SELECT、WHERE、AS 和简单计算字段。
-7. Python 批阅和 OCR 拍照纠错不进入当前版本。
+7. 作业批阅、Python 批阅和 OCR 拍照纠错不进入当前已实现主流程。
 8. 外部教师真实使用应自行部署，不使用项目方演示服务器。
 
 ## 9. Security and Privacy Notes / 安全与隐私说明
@@ -555,7 +557,7 @@ V0.2 为了保证半个月内可落地，采用以下简化策略：
 4. 公开仓库只保留演示班级、虚构学生和脱敏样例数据。
 5. 项目方演示服务器不承接外部真实班级大规模试用。
 6. 私有部署时，使用方应自行负责学生数据与 API Key 的管理。
-7. SQL 批阅执行环境应与业务数据库隔离，避免学生 SQL 影响系统数据。
+7. 后续如扩展编程类作业规则测试，执行环境应与业务数据库隔离，避免提交内容影响系统数据。
 
 ## 10. Next Step / 下一步
 
@@ -571,7 +573,7 @@ V0.2 为了保证半个月内可落地，采用以下简化策略：
 - 最小课程计划上传与预览页面。
 ## 11. Programming Assignment Extension / 编程作业扩展预留
 
-V0.2 当前 SQL 主线可以先沿用现有 `assignments`、`submissions`、`grading_results` 三张表完成 SQL 作业、提交和教师复核。不要为了 Python 加分原型强行推翻已有设计。
+作业批阅当前不是已实现主流程。后续如探索编程类、数据库类作业的规则测试与 AI 辅助评语草稿，可参考 `assignments`、`submissions`、`grading_results` 或统一的 `programming_*` 表设计。
 
 如果后续需要同时支持 SQL 和 Python 等编程类作业，可以逐步抽象为统一的 `programming_*` 表。该设计用于扩展预留，不要求在 V0.2 主线中一次性全部实现。
 
@@ -596,7 +598,7 @@ V0.2 当前 SQL 主线可以先沿用现有 `assignments`、`submissions`、`gra
 
 说明：
 
-- SQL 主线仍可使用当前 `assignments` 表。
+- 数据库类作业后续可使用 `assignments` 表或迁移到统一编程作业表。
 - Python 基础题原型如需落库，可以先复用 `assignments.assignment_type`，后续再迁移到 `programming_assignments`。
 - Python 原型只面向单文件 `.py` 和简单输入输出题，不记录多文件项目结构。
 
@@ -616,7 +618,7 @@ V0.2 当前 SQL 主线可以先沿用现有 `assignments`、`submissions`、`gra
 
 说明：
 
-- 当前 `submissions.content` 可先保存 SQL 或 Python 提交内容。
+- 后续如实现提交功能，`submissions.content` 可保存数据库类或 Python 入门题提交内容。
 - 后续统一为 `submitted_code` 时，应保留旧数据迁移路径。
 - Python 提交不得包含真实学生身份信息，也不得提交到公开仓库。
 
@@ -644,8 +646,7 @@ V0.2 当前 SQL 主线可以先沿用现有 `assignments`、`submissions`、`gra
 
 说明：
 
-- 当前 `grading_results` 已能保存自动分、最终分、执行输出、错误信息和教师反馈。
-- V0.2 可先在 `grading_results` 上扩展错误类型字段，或在后续版本新增 `grading_annotations`。
+- 后续如实现作业批阅预留能力，可在 `grading_results` 上扩展错误类型字段，或新增 `grading_annotations`。
 - `can_enter_dataset` 只能在脱敏、授权和教学用途明确的前提下使用。
 - 数据标注不是为了监控学生，而是为了帮助教师理解常见错误、优化导学案和改进教学。
 

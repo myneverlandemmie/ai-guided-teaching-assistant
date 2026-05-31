@@ -8,7 +8,7 @@
 
 当前代码已经实现会话级 API Key 管理和 DeepSeek Provider，并已接入真实知识主干生成。
 
-当前真实 AI 只用于“知识主干生成”。导学案、小测题、SQL 批阅、Python 批阅暂未接入真实 AI。
+当前 DeepSeek Provider 用于教师端生成链路。作业批阅、学生端和学习通 API 暂未实现。
 
 ## Principles / 原则
 

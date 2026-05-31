@@ -1,187 +1,314 @@
-# AI Guided Teaching Design Assistant / 智学导评：AI 辅助教学设计分析与导学案生成系统
+# 智学导评 V0.2
 
-## 中文说明
+仓库名：`ai-guided-teaching-assistant`
 
-本项目是“智学导评 V0.2”的工程仓库，用于建设一个面向中职教师的 AI 辅助教学设计分析与导学案生成系统。
-
-V0.2 版本聚焦“教师上传材料 → 系统提炼课程知识主干 → 生成课前学情测试 → 生成学生导学案 → 教师编辑确认后用于课堂”的演示闭环。系统不是 AI 自动备课系统，也不是一键生成完整教案或自动批阅作业的平台。
-
-截至当前文档基线，代码已经完成课程计划导入、课次确认、正式课次管理、课次材料上传与基础文本提取、会话级 API Key 管理、DeepSeek Provider、真实知识主干生成、课前学情测试草稿、学生导学案草稿、学习通题库模板导出和导学案 Markdown 下载。自动批阅、学生端、学习通 API、完整登录注册仍属于规划中或实验性方向。
-
-核心流程：
-
-1. 教师上传课程授课计划 Excel；
-2. 系统解析授课计划并自动拆解课次；
-3. 教师上传某一课次的教案或 PPT 文本；
-4. 教师可设置当前会话 DeepSeek API Key；未设置时可使用本地结构化草稿演示主流程；
-5. 系统生成课程知识主干初稿，教师可编辑保存；
-6. 系统基于知识主干生成课前学情测试草稿；
-7. 系统生成学生导学案草稿；
-8. 教师查看、编辑、确认后用于课堂；
-9. 学习通题库模板导出和 Markdown 下载作为辅助输出。
-
-自动批阅相关能力统一作为编程类课程后续实验性方向，不作为 V0.2 当前核心主线。
-
-## English Summary
-
-This repository contains the V0.2 implementation of an AI-assisted teaching design analysis and learning-guide generation system for vocational teachers.
-
-The current codebase has implemented course plan import, lesson confirmation, lesson material upload, basic `.docx` / `.pptx` text extraction, session-level API Key handling, real DeepSeek-based knowledge outline generation, diagnostic probe drafts, student learning guide drafts, Chaoxing import-template export, and Markdown download. Auto grading, student-side workflows, external learning-platform APIs, and full authentication are still planned work.
-
-## 三层使用模式 / Three Usage Modes
-
-本项目不建议让外部教师直接带真实学生使用项目方演示服务器。推荐采用三层模式：
-
-1. 云端演示模式：项目方阿里云 ECS 仅用于案例展示和视频录制；
-2. Windows 单机体验模式：普通教师可在本机体验核心流程；
-3. Linux / 私有服务器部署模式：学校或教师可部署到自有服务器，数据与 API Key 自主管理。
-
-This project does not encourage external teachers to use the project owner's demo server with real student data. Instead, it provides three modes:
-
-1. Cloud demo mode for case demonstration only;
-2. Windows local demo mode for low-barrier teacher trial;
-3. Linux / private server deployment for real classroom use.
-
-## 主要技术决策 / Main Technical Decisions
-
-- Backend / 后端：FastAPI
-- Frontend / 前端：simple server-rendered pages first / 优先使用简单模板页面
-- Database / 数据库：MySQL for deployment, SQLite-compatible demo mode for Windows trial / 部署使用 MySQL，Windows 体验模式支持 SQLite 兼容演示
-- AI model / AI 模型：DeepSeek V4 Flash by default, V4 Pro optional / 默认 DeepSeek V4 Flash，可选择 V4 Pro
-- Deployment / 部署：Alibaba Cloud ECS for project demo; private deployment for real use / 项目演示用阿里云 ECS，真实使用建议私有部署
-- Demo lesson / 演示课：SELECT + WHERE
-- Documentation / 文档：Chinese-first bilingual documentation / 中文优先的双语文档
-
-## Current Baseline / 当前实现基线
-
-已实现：
-
-- `.xlsx` 授课计划上传；
-- Excel 课程计划解析，样例计划可解析出 28 个 planned lessons；
-- planned lessons 预览；
-- planned lessons 确认 / 跳过；
-- 批量生成正式 Lesson；
-- 正式课次列表；
-- 正式课次详情页；
-- 课次材料添加；
-- 粘贴文本材料；
-- `.txt` / `.md` 材料读取；
-- `.docx` 基础文本提取，包括段落和表格单元格；
-- `.pptx` 实验性文本提取，包括文本框和表格文本；
-- 多文件上传；
-- 删除课次材料；
-- 默认材料标题；
-- 教师页面不显示服务器绝对路径；
-- Mock AI 知识主干生成，仅用于测试或显式开发模式；
-- 会话级 DeepSeek API Key 设置、掩码显示和清除；
-- DeepSeek Provider；
-- 真实 DeepSeek 知识主干生成；
-- 无 API Key 时可生成本地结构化知识主干草稿，用于演示和初稿准备；
-- AI 设置页支持教师选择当前会话 DeepSeek 模型；
-- 知识主干生成使用固定 Prompt 模板，包含课程思政与职业素养融入点、可测知识点与题型蓝图、补充内容建议和 AI 草稿声明；
-- 知识主干编辑和保存；
-- 知识主干生成前对学校、教师、班级等行政信息做基础过滤；
-- 课前学情测试草稿生成；
-- 学生导学案草稿生成；
-- 学习通题库模板导出；
-- 导学案 Markdown 下载；
-- 教师编辑保存草稿；
-- 课次任务面板。
-
-当前未实现：
-
-- 完整注册 / 登录；
-- 教师账号、学生账号、班级管理；
-- 真实 API 生成导学案；
-- SQL 作业提交与自动批阅；
-- Python 批阅；
-- 学生端；
-- 学习通 API；
-- 统计分析；
-- OCR、PDF、图片或扫描件解析；
-- 复杂 Vue / React 前端。
-
-当前开发阶段暂用 demo course / demo teacher 作为临时上下文，不作为最终试用方式。
-
-## Trial and Account Strategy / 试用账号策略
-
-开发阶段：
-
-- 暂用 demo course / demo teacher；
-- 不作为最终部门内试用或外部演示方式。
-
-V0.2 演示 / 部门内试用阶段：
-
-- 提供测试教师账号；
-- 提供测试学生账号；
-- 第一个班级使用“演示班级”或“测试班级”；
-- 教师可创建测试班级；
-- 学生使用测试账号进入班级查看导学内容或提交演示作业；
-- 学生不需要填写 API Key。
-
-API Key 策略：
-
-- 教师使用自己的 API Key；
-- 平台不提供公共 Token；
-- 平台不做 Token 转售；
-- API Key 不应明文入库、写入日志或提交到 Git；
-- API Key 不能只存 hash，因为 hash 无法还原，不能用于真实 API 调用；
-- V0.2 已实现“会话级临时 API Key”，浏览器 cookie 只保存 `session_id`，服务端内存临时保存 `session_id -> api_key`，清除 / 服务重启后失效；
-- 若后续需要长期保存 Key，应另行设计加密存储方案，不在当前阶段实现。
-
-## AI Settings / AI 设置
-
-开发或演示时，教师进入：
+GitHub 地址：
 
 ```text
-/ai/settings
+https://github.com/myneverlandemmie/ai-guided-teaching-assistant
 ```
 
-填写自己的 DeepSeek API Key。页面只显示掩码，例如 `sk-****abcd`，不会回显完整 Key。
+## 1. 项目简介
 
-教师需要自行准备 DeepSeek API Key，并确认 DeepSeek 账户有可用余额。`.env.example` 不包含真实 Key，不要把真实 Key 写入 `.env.example`、日志或 Git。
+智学导评 V0.2 是一个面向中职教师的 AI 辅助教学设计分析与导学案生成系统。它帮助教师围绕课程、正式课次、课次资料、知识主干、课前学情测试和学生导学案完成教学准备。
 
-教师可在 AI 设置页选择知识主干生成使用的 DeepSeek 模型。模型选择是当前浏览器会话级设置，只保存在服务端内存中，不写入数据库、不写入 cookie、不写入日志；清除 API Key 时会同时清除模型选择。
+适用对象包括中职教师、课程负责人、教研组和教学案例建设场景。
 
-环境变量示例：
+它不是学生端系统，不是自动备课系统，不是一键生成完整教案系统，也不是自动批阅平台。系统生成的内容都应视为草稿，必须由教师审阅、修改、确认后再使用。
 
-```env
-AI_PROVIDER=deepseek
-DEEPSEEK_BASE_URL="https://api.deepseek.com"
-DEEPSEEK_ALLOWED_MODELS=deepseek-v4-flash,deepseek-v4-pro
-DEEPSEEK_DEFAULT_MODEL=deepseek-v4-flash
-AI_REQUEST_TIMEOUT_SECONDS=60
-AI_SESSION_COOKIE_SECURE=false
-AI_SESSION_KEY_IDLE_TIMEOUT_SECONDS=14400
-AI_SESSION_KEY_MAX_ENTRIES=200
-AI_PROMPT_MATERIAL_MAX_CHARS=12000
+## 2. 功能概览
+
+当前 V0.2 主流程包括：
+
+1. 课程中心 V2：默认演示入口为 `/ui-v2/courses`。
+2. 课程计划上传：教师上传授课计划。
+3. 正式课次生成：从课程计划中解析课次，并生成正式课次列表。
+4. 课程资料整理：为课次上传或粘贴教学资料。
+5. 资料文本提取：支持 `txt`、`md`、`docx`、`pptx`、`xlsx`，不支持 `xls`、`doc`、`ppt`。
+6. 知识主干生成与教师编辑：根据课次资料生成知识结构草稿，教师可修改保存。
+7. 备课参考建议：为教师提供课堂设计和教学准备参考。
+8. 课前学情测试 V2：生成用于了解学生课前基础的诊断题。
+9. 题卡预览与编辑：支持单题编辑、删除和学习通习题文件导出。
+10. 学生导学案 V2：生成导学案和任务包。
+11. 任务包：支持全班通用导学案、巩固提升任务包、拓展探究任务包。
+12. Markdown 下载：导学案和任务包可下载为 Markdown 文件。
+13. 作业批阅预留：后续可探索编程类、数据库类作业的规则测试与 AI 辅助评语草稿。
+
+旧页面仍保留为 legacy / 兼容页面，用于兼容入口、测试入口和部分回退入口。案例提交前不建议移动或删除旧模板；后续如果完全切换到 V2，再单独做旧 UI 归档。
+
+## 3. 安装前准备
+
+如果你主要使用 Windows，推荐用 WSL + Ubuntu 运行本项目。
+
+WSL 是 Windows Subsystem for Linux 的缩写，可以理解为 Windows 内置的 Linux 运行环境。Ubuntu 是常见的 Linux 系统。项目使用 Python 和 FastAPI，放在 Ubuntu 中运行更接近未来服务器环境，也更方便安装依赖。
+
+需要准备：
+
+1. Windows 10 或 Windows 11。
+2. WSL2。
+3. Ubuntu。
+4. Git。
+5. Python 3。
+6. 浏览器，例如 Edge、Chrome 或 Firefox。
+
+## 4. Windows + WSL 安装步骤
+
+以下步骤面向第一次使用 WSL 的教师。
+
+第一步：以管理员身份打开 Windows 的“终端”或“PowerShell”，安装 WSL。
+
+```powershell
+wsl --install
 ```
 
-如 DeepSeek 官方模型名称变化，管理员可更新 `DEEPSEEK_ALLOWED_MODELS` 和 `DEEPSEEK_DEFAULT_MODEL` 后重启服务。`/ai/settings` 页面只显示配置说明、建议配置路径和官方文档链接，不读取、不打开、不下载、不展示真实 `.env` 内容。本地开发通常在项目根目录 `.env` 中配置，示例变量见 `.env.example`。
+推荐方式是先执行上面的命令。通常这一步会安装 WSL 和默认 Ubuntu。安装完成后，按提示重启电脑。
 
-测试环境不得真实请求 DeepSeek；应使用 monkeypatch / fake provider 或显式 `AI_PROVIDER=mock`。学生账号不需要 API Key。
+备用方式：如果执行 `wsl --install` 后没有自动安装 Ubuntu，可以打开 Microsoft Store，搜索并安装 Ubuntu。
 
-配置说明：
+第二步：打开 Ubuntu。第一次打开时，系统会要求你设置 Ubuntu 用户名和密码。这个密码用于 Ubuntu 内部操作，输入时屏幕不显示字符是正常现象。
 
-- `DEEPSEEK_ALLOWED_MODELS`：允许教师在 AI 设置页选择的 DeepSeek 模型，逗号分隔；
-- `DEEPSEEK_DEFAULT_MODEL`：默认模型，必须属于允许模型列表，否则回退到安全默认值；
-- `deepseek-v4-pro`：更适合知识主干生成、课程思政与职业素养融入点、正式案例展示和争议样本复核；
-- `deepseek-v4-flash`：更适合日常快速预览、批量反馈初稿、调试 Prompt 和验证页面流程；
-- 知识主干正式演示建议优先使用 `deepseek-v4-pro`，批量反馈或调试建议优先使用 `deepseek-v4-flash`；
-- `AI_SESSION_COOKIE_SECURE=true`：公网 HTTPS 部署时启用，本地开发可保持 `false`；
-- `AI_SESSION_KEY_IDLE_TIMEOUT_SECONDS=14400`：当前会话 API Key 空闲 4 小时后自动失效；
-- `AI_SESSION_KEY_MAX_ENTRIES=200`：单进程内存最多保留 200 个会话 Key，超限会清理过期或最久未使用项；
-- `AI_PROMPT_MATERIAL_MAX_CHARS=12000`：构造知识主干 prompt 时使用的材料字符上限；
-- Mock 只用于自动化测试或显式 `AI_PROVIDER=mock` 的本地开发模式；正式演示缺少 API Key 时显示为“本地结构化草稿”，不包装成真实 AI 成果；
-- 真实 AI 目前只接入知识主干生成；
-- 当前方案是 V0.2 本地开发 / 部门内试用级临时方案，不是生产级凭据管理系统。
-
-知识主干生成使用固定 Prompt 模板。输出是教师审阅用草稿，不是自动定稿内容；其中包含课程思政与职业素养融入点、可测知识点与题型蓝图、补充内容建议和 AI 草稿声明。课程思政内容必须有依据，严禁编造政策文件、政策原文、标准编号、真实企业案例或真实数据来源。“可测知识点与题型蓝图”只作为后续小测设计参考，不生成正式测评，且需包含至少 1 条课程思政 / 职业素养相关测试方向。“补充内容建议”仅为参考方向，必须由教师人工筛选、修改和确认。
-
-## 首次 Git 命令 / First Git Commands
+第三步：更新 Ubuntu 软件列表。
 
 ```bash
-git init
-git add README.md .gitignore .env.example docs/ backend/ data/ deployment/ scripts/ tests/
-git commit -m "chore: initialize bilingual project structure"
+sudo apt update
 ```
+
+这一步让 Ubuntu 获取最新的软件包信息。
+
+第四步：安装 Git、Python 和虚拟环境工具。
+
+```bash
+sudo apt install -y git python3 python3-venv python3-pip
+```
+
+Git 用来获取项目代码，Python 用来运行系统，虚拟环境用于隔离本项目依赖。
+
+## 5. 获取项目代码
+
+在 Ubuntu 终端中选择一个普通目录存放项目，例如：
+
+```bash
+mkdir -p ~/projects
+cd ~/projects
+```
+
+下载项目代码：
+
+```bash
+git clone https://github.com/myneverlandemmie/ai-guided-teaching-assistant
+```
+
+进入项目目录：
+
+```bash
+cd ai-guided-teaching-assistant
+```
+
+后续文档中，`<project-root>` 或“项目根目录”都指这个目录。不要把项目固定放在某个特定的个人路径中。
+
+## 6. 创建虚拟环境并安装依赖
+
+在项目根目录执行：
+
+```bash
+python3 -m venv .venv
+```
+
+这一步会创建 `.venv` 虚拟环境。
+
+启用虚拟环境：
+
+```bash
+source .venv/bin/activate
+```
+
+安装依赖：
+
+```bash
+pip install -r backend/requirements.txt
+```
+
+如果提示找不到 `backend/requirements.txt`，请确认当前终端位置在项目根目录。
+
+如果以后重新打开 Ubuntu 终端，需要先进入项目目录，再执行 `source .venv/bin/activate`。
+
+## 7. 启动系统
+
+Windows 用户可以在项目根目录双击：
+
+```text
+start_v2_courses.bat
+```
+
+请在项目根目录运行这个 bat，不要单独复制到桌面运行。
+
+这个脚本会启动 FastAPI 服务，并自动打开 V2 课程中心：
+
+```text
+http://127.0.0.1:8000/ui-v2/courses
+```
+
+第一次启动可能超过脚本等待时间。如果浏览器先打开失败，请等终端中服务启动完成后刷新页面。
+
+Windows 安全提示：如果项目是从 GitHub 下载 ZIP 后解压得到的，Windows 可能会因为文件来自互联网而阻止 `.bat` 批处理文件运行。推荐方式是使用 `git clone` 获取项目代码。如果确认项目来源可靠，也可以右键点击 `.bat` 文件，选择“属性”，在“安全”位置勾选“解除锁定/取消阻止”，再运行。若学校电脑策略不允许运行批处理文件，请使用下面的手动启动命令。
+
+也可以手动启动。在 Ubuntu 终端中进入项目根目录，然后执行：
+
+```bash
+cd backend
+AI_PROVIDER=deepseek PYTHONPATH=. ../.venv/bin/uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+启动后在浏览器打开：
+
+```text
+http://127.0.0.1:8000/ui-v2/courses
+```
+
+不要把旧版 `/courses` 作为默认演示入口。
+
+## 8. 清理运行数据
+
+项目根目录提供：
+
+```text
+clean_runtime_data.bat
+```
+
+请在项目根目录运行这个 bat，不要单独复制到桌面运行。
+
+它会删除本地运行数据库、上传文件和导出文件，但不会删除源码。
+
+如果 Windows 阻止运行 `clean_runtime_data.bat`，不要强行绕过。可以改用手动清理命令，或请熟悉电脑操作的教师协助。清理脚本会删除本地演示数据，请确认没有重要数据后再执行。
+
+具体会清理：
+
+1. `backend/app.db`
+2. `data/uploads` 下的运行文件
+3. `data/exports` 下的运行文件
+
+清理后会重新创建：
+
+1. `data/uploads`
+2. `data/exports/chaoxing`
+3. `data/exports/guides`
+
+这是危险操作，只建议在演示前清空环境或重新开始测试时使用。如果已有重要本地数据，不要执行。
+
+## 9. DeepSeek API Key 设置
+
+启动系统后，在浏览器打开：
+
+```text
+http://127.0.0.1:8000/ai/settings
+```
+
+操作步骤：
+
+1. 粘贴自己的 DeepSeek API Key。
+2. 选择模型。
+3. 保存后返回课程或课次页面继续生成。
+
+模型建议：
+
+1. `deepseek-v4-flash`：适合快速预览和页面流程验证。
+2. `deepseek-v4-pro`：适合正式生成、任务包和备课参考建议。
+
+API Key 只保存在当前会话的服务端内存中。清除 Key、服务重启或会话过期后会失效。不要把 API Key 写入文档、日志、`.env` 示例或提交到 Git。
+
+## 10. 基本使用流程
+
+教师可以按下面流程演示或试用：
+
+1. 打开 V2 课程中心。
+2. 新建或选择课程。
+3. 上传授课计划。
+4. 查看系统生成的正式课次。
+5. 进入某一正式课次。
+6. 上传教案、PPT、实训指导书、补充材料，或粘贴文本。
+7. 生成知识主干。
+8. 教师审阅、修改并保存知识主干。
+9. 查看备课参考建议。
+10. 生成课前学情测试。
+11. 预览题卡，按需编辑或删除单题。
+12. 导出学习通习题文件。
+13. 生成学生导学案、巩固提升任务包和拓展探究任务包。
+14. 教师审阅、修改、确认。
+15. 下载 Markdown 文件，用于后续整理或发布到既有教学平台。
+
+## 11. 伦理与使用边界
+
+AI 输出是草稿，不是最终教学结论。
+
+教师必须审阅、修改、确认后再使用。系统不自动发布给学生，不统计学生成绩，不评价教师能力，不替代教学设计。
+
+课前学情测试用于帮助教师了解学习起点，不作为正式考试成绩。导学案和任务包用于辅助课堂准备，不应直接替代教师对班级情况的判断。
+
+作业批阅仅作为后续探索方向。未来如扩展到编程类、数据库类作业，也应定位为规则测试与 AI 辅助评语草稿，结果仅供教师参考，需教师审核确认后使用。
+
+## 12. 常见问题
+
+### 端口 8000 被占用怎么办？
+
+说明已有其他程序占用了 8000 端口。可以先关闭之前启动的终端窗口，或在终端中按 `Ctrl + C` 停止旧服务，然后重新启动。
+
+### 忘记启动虚拟环境怎么办？
+
+如果提示找不到 `uvicorn`、`pytest` 或依赖包，请进入项目根目录后执行：
+
+```bash
+source .venv/bin/activate
+```
+
+再重新执行启动命令。
+
+### 页面打不开怎么办？
+
+先确认启动终端没有报错，并且看到服务运行在 `127.0.0.1:8000`。第一次启动可能较慢，浏览器先打开失败时，等终端启动完成后刷新页面。
+
+### API Key 不工作怎么办？
+
+请检查 Key 是否复制完整，DeepSeek 账户是否可用，模型选择是否正确，网络是否可访问 DeepSeek 服务。不要把 Key 提交到 Git。
+
+### 为什么生成失败会出现本地结构化草稿？
+
+为了保证演示流程不中断，系统在缺少 Key 或生成失败时可能提供本地结构化草稿。它不是 DeepSeek 的真实生成结果，只用于教师预览结构和继续编辑。
+
+### 为什么不能上传 xls？
+
+`xls` 是较旧的 Excel 格式，当前资料提取只支持 `xlsx`，不支持 `xls`。建议先用 Excel 或 WPS 另存为 `xlsx` 后再上传。
+
+### 为什么上传 PDF、图片、扫描件暂不支持？
+
+PDF、图片和扫描件通常需要 OCR 或更复杂的解析流程。V0.2 暂不实现这类解析，建议先整理为 `txt`、`md`、`docx`、`pptx` 或 `xlsx`。
+
+### 为什么旧页面还在？
+
+旧页面仍承担兼容入口、测试入口和部分回退入口。当前推荐演示 V2 页面，但案例提交前不建议移动或删除旧模板。
+
+## 13. 测试
+
+在项目根目录执行：
+
+```bash
+cd backend
+PYTHONPATH=. ../.venv/bin/pytest -q
+```
+
+测试数量以本轮实际输出为准。测试通过只表示当前已实现链路通过自动化检查，不代表预留功能已经完成。
+
+## 14. 部署说明
+
+当前推荐先使用本地 WSL 演示，便于教师和教研场景快速验证流程。
+
+后续可以部署到阿里云服务器或学校自有服务器。正式部署时应单独设计 HTTPS、数据库、备份、日志、权限、API Key 临时存储和数据安全方案，不建议直接把本地演示配置作为生产配置。
+
+## 15. Prompt 文件与校本化调整
+
+系统重要生成提示词位于 `docs/prompts/` 目录。这些文件用于说明或约束知识主干、备课参考建议、课前学情测试、学生导学案等内容的输出风格和结构。
+
+教研团队可根据学校课程、专业方向、教学材料要求和案例申报口径进行二次调整。普通使用者不建议随意修改 prompt 文件，因为修改后可能影响生成内容的稳定性、格式和教学边界。
+
+修改前请先备份原文件。修改后应重新启动服务，并手动验证知识主干、备课参考建议、课前学情测试和学生导学案等生成效果。如果修改后输出异常，可恢复原 prompt 文件。
+
+不要在 prompt 文件中写入 API Key、学生个人隐私、教师个人隐私或真实敏感数据。

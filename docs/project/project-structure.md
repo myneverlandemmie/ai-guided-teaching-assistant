@@ -13,7 +13,7 @@ The project uses English directory names for GitHub, Codex, deployment scripts, 
 H1 titles should use one line with English / Chinese separated by a slash, rather than two consecutive H1 headings, to avoid unwanted page breaks when exporting PDFs with Typora.
 
 ```text
-ai-guided-sql-assessment/
+ai-guided-teaching-assistant/
 ├── README.md
 ├── .gitignore
 ├── .env.example
@@ -36,7 +36,7 @@ ai-guided-sql-assessment/
 │   │   ├── services/     # 业务服务 / Business services
 │   │   │   ├── ai/       # AI 调用 / AI service
 │   │   │   ├── course_plan/ # 授课计划解析 / Course plan parsing
-│   │   │   └── grading/  # SQL 批阅 / SQL grading
+│   │   │   └── grading/  # 作业批阅预留 / Reserved grading
 │   │   ├── templates/    # 页面模板 / Templates
 │   │   └── static/       # 静态资源 / Static files
 │   ├── tests/
