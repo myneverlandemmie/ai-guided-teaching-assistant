@@ -87,11 +87,11 @@ def test_lesson_drafts_template_contains_generation_guard() -> None:
     assert "AI 正在生成，请稍候" in template
     assert "请勿重复点击" in template
     assert "data-draft-generation-form" in template
+    assert "data-ai-generation-form" in template
     assert "data-draft-generation-button" in template
     assert "handleLessonDraftGenerationSubmit" in template
     script = Path("app/static/js/app.js").read_text(encoding="utf-8")
     assert "button.disabled = true" in script
     assert "event.submitter" in script
-    assert "button !== clickedButton" in script
     assert "button.textContent = 'AI 正在生成，请稍候...'" not in script
-    assert "clickedButton.textContent = 'AI 正在生成，请稍候...'" in script
+    assert "clickedButton.textContent = form.getAttribute('data-loading-label')" in script

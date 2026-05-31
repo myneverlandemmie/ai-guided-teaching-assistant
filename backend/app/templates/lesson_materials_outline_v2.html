@@ -88,7 +88,14 @@
         <p>支持 txt / md / docx / pptx，上传后系统提取文本用于知识主干生成。</p>
         <form method="post" action="/lessons/{{ lesson.id }}/materials" enctype="multipart/form-data">
           <input type="hidden" name="return_to" value="{{ v2_return_to }}">
-          <input type="hidden" name="material_type" value="supplementary">
+          <input type="hidden" name="input_mode" value="file_upload">
+          <label for="file-category-v2">资料类别</label>
+          <select id="file-category-v2" name="material_category">
+            {% for value, label in material_category_options %}
+              <option value="{{ value }}" {% if value == "supplementary" %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <p class="form-help-v2">用于帮助系统区分材料来源，便于生成知识主干和备课参考建议。</p>
           <label for="file-title-v2">资料标题</label>
           <input id="file-title-v2" name="title" type="text" placeholder="可不填，系统会自动生成">
           <label for="files-v2">选择文件</label>
@@ -102,7 +109,14 @@
         <p>可粘贴教案片段、课堂任务、实训步骤或补充说明。</p>
         <form method="post" action="/lessons/{{ lesson.id }}/materials">
           <input type="hidden" name="return_to" value="{{ v2_return_to }}">
-          <input type="hidden" name="material_type" value="pasted_text">
+          <input type="hidden" name="input_mode" value="pasted_text">
+          <label for="text-category-v2">资料类别</label>
+          <select id="text-category-v2" name="material_category">
+            {% for value, label in material_category_options %}
+              <option value="{{ value }}" {% if value == "supplementary" %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <p class="form-help-v2">用于帮助系统区分材料来源，便于生成知识主干和备课参考建议。</p>
           <label for="text-title-v2">资料标题</label>
           <input id="text-title-v2" name="title" type="text" placeholder="可不填，系统会自动生成">
           <label for="content-v2">粘贴文本内容</label>
@@ -132,13 +146,13 @@
               {% elif material.material_type == "pasted_text" %}
                 文本
               {% else %}
-                资料
+                {{ material_category_label(material) }}
               {% endif %}
             </div>
             <div class="material-body-v2">
               <h3>{{ material.title }}</h3>
               <p class="material-meta-v2">
-                {{ material_type_labels.get(material.material_type, material.material_type) }}
+                资料类别：{{ material_category_label(material) }}
                 ｜
                 {% if material.file_path %}
                   原始文件名：{{ material.file_path|basename }}
@@ -175,13 +189,21 @@
           未生成
         {% endif %}
       </p>
+      <p class="outline-state-note-v2">
+        {% if not knowledge_outline %}
+          当前课次还没有知识主干。请先添加资料，再生成知识主干草稿。
+        {% elif knowledge_outline.status == "reviewed" %}
+          已由教师复核，可继续修改或重新生成。
+        {% else %}
+          已生成知识主干草稿，需教师审阅、修改与确认。
+        {% endif %}
+      </p>
       <p class="course-note-v2">AI 输出仅供教师审阅、修改与确认。</p>
-      <form method="post" action="/lessons/{{ lesson.id }}/knowledge-outline/generate" data-outline-generation-form data-loading-target="outline-v2-generation-hint" onsubmit="return handleOutlineGenerationSubmit(this);">
+      <form method="post" action="/lessons/{{ lesson.id }}/knowledge-outline/generate" data-ai-generation-form data-outline-generation-form data-status-target="outline-v2-generation-hint" data-loading-label="AI 正在生成，请稍候..." data-loading-message="AI 正在生成，请稍候……生成内容仅供教师参考，需审阅、修改与确认。" onsubmit="return handleAiGenerationSubmit(event, this);">
         <input type="hidden" name="return_to" value="{{ v2_return_to }}">
         <p id="outline-v2-generation-hint" class="generation-status" data-outline-generation-hint role="status" aria-live="polite">
-          正在生成知识主干，请勿重复点击。无 API Key 时将使用本地结构化草稿。
         </p>
-        <button type="submit" data-outline-generation-button>
+        <button type="submit" data-ai-generation-button data-outline-generation-button>
           {% if knowledge_outline %}重新生成知识主干{% else %}生成知识主干{% endif %}
         </button>
       </form>
@@ -209,17 +231,18 @@
         <span class="eyebrow-v2">备课参考</span>
         <h2>备课参考建议</h2>
       </div>
-      <p>基于本课资料与知识主干生成备课参考建议，供教师审阅、修改与取舍，不替代教师教学判断。</p>
+      <p>基于本课资料与知识主干提供第二视角，供教师选择性参考。</p>
     </div>
 
     <div class="prep-reference-grid-v2">
       <article class="prep-reference-summary-v2">
         <h3>辅助定位</h3>
-        <p>本功能提供教学结构提醒、材料质量与教学重心提醒、学情风险提醒和可选改进建议。</p>
+        <p>本功能从教学结构、材料支撑、学情风险和导学案生成要点等方面提供可选提醒，帮助教师检查公开课、汇报课或比赛课材料的完整性。</p>
         <p class="course-note-v2">本建议参考公开课、汇报课、教学能力比赛等较高标准材料的常见结构，仅用于提供第二视角。日常备课不必逐项满足，教师可结合班级基础、课时条件和实际教学安排选择性采纳。</p>
-        <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/teaching_prep_reference">
+        <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/teaching_prep_reference" data-ai-generation-form data-status-target="teaching-prep-reference-generation-hint" data-loading-label="AI 正在生成，请稍候..." data-loading-message="AI 正在生成备课参考建议，请稍候……生成内容仅供教师参考，需审阅、修改与确认。" onsubmit="return handleAiGenerationSubmit(event, this);">
           <input type="hidden" name="return_to" value="{{ v2_return_to }}">
-          <button type="submit">生成备课参考建议</button>
+          <p id="teaching-prep-reference-generation-hint" class="generation-status" role="status" aria-live="polite"></p>
+          <button type="submit" data-ai-generation-button>生成备课参考建议</button>
         </form>
       </article>
 

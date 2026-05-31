@@ -24,7 +24,7 @@
     </div>
     <div class="lessons-head-actions-v2">
       <a class="button-link" href="/ui-v2/courses">返回课程中心</a>
-      <a class="button-link button-ghost" href="/courses/{{ course.id }}/course-plan/upload">继续上传授课计划</a>
+      <a class="button-link button-ghost" href="/courses/{{ course.id }}/course-plan/upload?return_to=/ui-v2/courses">继续上传授课计划</a>
     </div>
   </section>
 
@@ -42,9 +42,11 @@
           <th>学时</th>
           <th>课次编码</th>
           <th>课次标题</th>
-          <th>教学内容摘要</th>
+          {% if show_notes_column %}
+            <th>教学内容摘要</th>
+          {% endif %}
           <th>状态</th>
-          <th>操作</th>
+          <th class="lesson-actions-header-v2">操作</th>
         </tr>
       </thead>
       <tbody>
@@ -55,10 +57,12 @@
             <td>{{ lesson.hours }}</td>
             <td>{{ lesson.lesson_code }}</td>
             <td>{{ lesson.title }}</td>
-            <td>{{ lesson.content_summary }}</td>
+            {% if show_notes_column %}
+              <td>{{ lesson.planned_lesson.notes if lesson.planned_lesson else "" }}</td>
+            {% endif %}
             <td>{{ lesson.status }}</td>
             <td class="lesson-table-actions-v2">
-              <a href="/ui-v2/lessons/{{ lesson.id }}/materials-outline">资料主干</a>
+              <a href="/ui-v2/lessons/{{ lesson.id }}/materials-outline">资料与主干</a>
               <a href="/lessons/{{ lesson.id }}/drafts">学情测试</a>
               <a href="/lessons/{{ lesson.id }}/drafts">导学案</a>
             </td>

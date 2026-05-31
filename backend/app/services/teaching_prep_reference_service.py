@@ -14,6 +14,16 @@ from app.services.ai.sanitizer import sanitize_text_for_outline
 
 TEACHING_PREP_REFERENCE_DRAFT_TYPE = "teaching_prep_reference"
 LOCAL_STRUCTURED_DRAFT = "local-structured-draft"
+MATERIAL_TYPE_LABELS = {
+    "pasted_text": "粘贴文本",
+    "lesson_plan": "教案",
+    "course_ppt": "PPT课件",
+    "training_guide": "实训指导书",
+    "task_sheet": "任务书 / 学习单",
+    "evaluation_sheet": "评价表 / 记录表",
+    "supplementary": "补充材料",
+    "other": "其他",
+}
 PROMPT_PATH = Path(__file__).resolve().parents[3] / "docs" / "prompts" / "teaching-prep-reference-suggestions-v0.1.md"
 SYSTEM_MESSAGE = """
 你是面向中职教师的备课参考建议助理。只提供温和、可选、可审阅的参考建议。
@@ -31,7 +41,15 @@ def load_teaching_prep_reference_prompt() -> str:
 # Teaching Prep Reference Suggestions v0.1 / 备课参考建议 Prompt v0.1
 
 仅供教师备课参考，不替代教师判断；不输出完整教案；不评价教师能力。
-输出结构：材料概况、已有亮点、可能遗漏、教学环节参考、导学案生成提示、课前学情测试提示、评价参考、教师确认声明。
+输出必须是标准 Markdown，并使用以下二级标题：
+## 一、材料概况
+## 二、已有亮点
+## 三、可能遗漏
+## 四、教学环节参考
+## 五、导学案生成提示
+## 六、课前学情测试提示
+## 七、评价参考
+## 八、教师确认声明
 """.strip()
 
 
@@ -53,7 +71,8 @@ def _materials_text(materials: list[LessonMaterial], max_chars: int = 4200) -> s
         content = sanitize_text_for_outline((material.content or "").strip())
         if not content:
             continue
-        header = f"## {material.title or '课次资料'}\n"
+        material_label = MATERIAL_TYPE_LABELS.get(material.material_type, "其他")
+        header = f"## {material.title or '课次资料'}\n资料类别：{material_label}\n"
         budget = max(0, remaining - len(header))
         if budget <= 0:
             break
@@ -94,8 +113,9 @@ def build_teaching_prep_reference_prompt(
 
 输出要求：
 - 直接输出正文，不要使用“当然可以”“以下是”等对话式开头；
-- 必须使用：一、材料概况；二、已有亮点；三、可能遗漏；四、教学环节参考；五、导学案生成提示；六、课前学情测试提示；七、评价参考；八、教师确认声明；
-- 如果材料不足，写明“仅基于现有材料判断”；
+- 必须输出标准 Markdown，并使用二级标题：## 一、材料概况；## 二、已有亮点；## 三、可能遗漏；## 四、教学环节参考；## 五、导学案生成提示；## 六、课前学情测试提示；## 七、评价参考；## 八、教师确认声明；
+- 每个标题下使用短段落或项目符号，关键词可适度加粗，不要使用纯文本大标题；
+- 如果材料不足，在“## 一、材料概况”中写明“以下建议仅基于当前已上传材料生成。”；
 - 语气必须温和、专业、可选择，可使用“可考虑”“如本课条件允许”“建议教师结合实际判断”“若已有安排，可忽略本建议”；
 - 不输出完整教案，不替教师重写教学流程，不评价教师能力。
 """.strip()
@@ -122,7 +142,7 @@ def generate_local_teaching_prep_reference(
 - 教学内容摘要：{lesson.content_summary or '暂无'}
 - 资料情况：{'已添加课次资料' if has_materials else '暂未添加课次资料'}。
 - 知识主干摘要：{outline_excerpt or '暂无知识主干摘要。'}
-- 说明：以下判断仅基于现有材料。
+- 说明：以下建议仅基于当前已上传材料生成。
 
 ## 二、已有亮点
 

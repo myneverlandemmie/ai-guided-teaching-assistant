@@ -423,6 +423,73 @@ input[type="file"] { margin: .75rem 0; }
   --ui-v2-warm: #FFF7E8;
   --ui-v2-shadow: 0 18px 50px rgba(16, 42, 42, 0.08);
   color: var(--ui-v2-text);
+  font-size: 15px;
+  line-height: 1.62;
+}
+
+.ui-v2-shell label {
+  display: inline-flex;
+  margin-bottom: .38rem;
+  color: var(--ui-v2-muted);
+  font-size: .88rem;
+  font-weight: 800;
+}
+
+.ui-v2-shell input[type="text"],
+.ui-v2-shell input[type="password"],
+.ui-v2-shell textarea,
+.ui-v2-shell select {
+  border: 1px solid var(--ui-v2-border);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ui-v2-text);
+  font-size: .95rem;
+  line-height: 1.45;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.ui-v2-shell input[type="text"]:focus,
+.ui-v2-shell input[type="password"]:focus,
+.ui-v2-shell textarea:focus,
+.ui-v2-shell select:focus {
+  outline: none;
+  border-color: rgba(0, 124, 120, .52);
+  box-shadow: 0 0 0 4px rgba(0, 124, 120, .10);
+}
+
+.ui-v2-shell button,
+.ui-v2-shell .button-link {
+  min-height: 2.5rem;
+  border-radius: 12px;
+}
+
+.ai-settings-page-v2 {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.ai-settings-form-v2 {
+  display: grid;
+  gap: 1rem;
+  max-width: 760px;
+}
+
+.ai-settings-form-v2 .ui-v2-field {
+  width: 100%;
+  max-width: 760px;
+}
+
+.ai-settings-form-v2 input,
+.ai-settings-form-v2 select {
+  width: 100%;
+}
+
+.ai-settings-form-actions-v2,
+.ai-settings-clear-form-v2 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem;
+  align-items: center;
 }
 
 .course-center-v2 {
@@ -632,6 +699,51 @@ input[type="file"] { margin: .75rem 0; }
   border-color: #fecaca;
 }
 .course-alert-v2 p { margin: 0; }
+
+.course-planned-feature-v2 {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  align-items: center;
+  margin-top: 1rem;
+  padding: 1rem 1.15rem;
+  border: 1px dashed #d4dedc;
+  border-radius: 20px;
+  background: #fbfcfd;
+  color: var(--ui-v2-muted);
+}
+
+.course-planned-feature-v2 > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.course-planned-feature-v2 h2 {
+  margin: .38rem 0 .25rem;
+  color: #40514f;
+  font-size: 1.18rem;
+}
+
+.course-planned-feature-v2 p {
+  margin: 0;
+  max-width: none;
+  line-height: 1.62;
+}
+
+.planned-badge-v2 {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.25rem;
+  padding: .48rem .82rem;
+  border-radius: 999px;
+  border: 1px solid #d7e0de;
+  background: #f2f5f5;
+  color: #667085;
+  font-weight: 800;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
 
 .course-toolbar-v2 {
   display: block;
@@ -918,19 +1030,28 @@ input[type="file"] { margin: .75rem 0; }
 .lesson-table-actions-v2 {
   display: flex;
   flex-wrap: wrap;
-  gap: .45rem;
-  min-width: 210px;
+  gap: .6rem;
+  min-width: 320px;
+}
+
+.lesson-actions-header-v2 {
+  width: 340px;
 }
 
 .lesson-table-actions-v2 a {
   display: inline-flex;
-  padding: .38rem .55rem;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.2rem;
+  padding: .42rem .72rem;
   border-radius: 999px;
   border: 1px solid rgba(0, 124, 120, .22);
   background: #fff;
   color: var(--ui-v2-brand-dark);
+  font-size: .9rem;
   font-weight: 800;
   text-decoration: none;
+  white-space: nowrap;
 }
 
 .lesson-table-actions-v2 a:first-child {
@@ -1101,10 +1222,16 @@ input[type="file"] { margin: .75rem 0; }
 }
 
 .materials-input-card-v2 p,
+.form-help-v2,
 .material-meta-v2,
 .material-excerpt-v2 {
   color: var(--ui-v2-muted);
   line-height: 1.62;
+}
+
+.form-help-v2 {
+  margin: -.3rem 0 .2rem;
+  font-size: .85rem;
 }
 
 .materials-input-card-v2 form {
@@ -1123,6 +1250,25 @@ input[type="file"] { margin: .75rem 0; }
 .materials-input-card-v2 textarea {
   min-height: 11rem;
   resize: vertical;
+}
+
+.lesson-materials-v2 .generation-status {
+  display: none;
+  border-radius: 12px;
+  padding: .58rem .68rem;
+  line-height: 1.55;
+  background: #edf6ff;
+  border: 1px solid #cbdff5;
+  color: #1e4775;
+  font-size: .9rem;
+}
+
+.outline-state-note-v2 {
+  border-radius: 14px;
+  padding: .7rem .8rem;
+  background: var(--ui-v2-soft);
+  color: var(--ui-v2-brand-dark);
+  font-weight: 700;
 }
 
 .materials-list-v2 {

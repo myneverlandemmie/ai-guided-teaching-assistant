@@ -5,27 +5,37 @@
     }
   }
 
-  window.handleLessonDraftGenerationSubmit = function handleLessonDraftGenerationSubmit(event, form) {
-    const targetId = form.getAttribute('data-loading-target');
+  window.handleAiGenerationSubmit = function handleAiGenerationSubmit(event, form) {
+    const targetId = form.getAttribute('data-status-target') || form.getAttribute('data-loading-target');
     const localStatus = targetId ? document.getElementById(targetId) : null;
     const globalStatus = document.querySelector('[data-global-generation-status]');
-    const buttons = document.querySelectorAll('[data-draft-generation-button]');
-    const clickedButton = event && event.submitter ? event.submitter : form.querySelector('[data-draft-generation-button]');
+    const buttons = form.querySelectorAll('[data-ai-generation-button], [data-draft-generation-button], [data-outline-generation-button], button[type="submit"]');
+    const clickedButton = event && event.submitter
+      ? event.submitter
+      : form.querySelector('[data-ai-generation-button], [data-draft-generation-button], [data-outline-generation-button], button[type="submit"]');
 
     showElement(localStatus);
     showElement(globalStatus);
 
     buttons.forEach((button) => {
       button.disabled = true;
-      if (button !== clickedButton) {
-        button.title = '当前已有生成任务进行中，请稍候';
-      }
     });
 
+    if (localStatus && form.getAttribute('data-loading-message')) {
+      localStatus.textContent = form.getAttribute('data-loading-message');
+    }
     if (clickedButton) {
-      clickedButton.textContent = 'AI 正在生成，请稍候...';
+      clickedButton.textContent = form.getAttribute('data-loading-label') || 'AI 正在生成，请稍候...';
     }
     return true;
+  };
+
+  window.handleLessonDraftGenerationSubmit = function handleLessonDraftGenerationSubmit(event, form) {
+    return window.handleAiGenerationSubmit(event, form);
+  };
+
+  window.handleOutlineGenerationSubmit = function handleOutlineGenerationSubmit(form) {
+    return window.handleAiGenerationSubmit(null, form);
   };
 
   function activateDraftTab(tab) {

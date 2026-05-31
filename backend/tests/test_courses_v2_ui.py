@@ -60,6 +60,16 @@ async def test_courses_v2_page_is_accessible_and_uses_real_courses(tmp_path: Pat
         assert "上传授课计划" in response.text
         assert f"/course-plan/upload?return_to=/ui-v2/courses" in response.text
         assert "查看正式课次" in response.text
+        assert "作业批阅" in response.text
+        assert "作业批阅（规划中）" not in response.text
+        assert "预留功能" in response.text
+        assert "仅供教师参考" in response.text
+        assert "教师审核确认" in response.text
+        assert "规划中" in response.text
+        assert "/grading" not in response.text
+        assert "AI 评语生成" not in response.text
+        assert "立即使用作业批阅" not in response.text
+        assert "学生端" not in response.text
         assert "course-rename-details-v2" in response.text
         assert "修改课程名" in response.text
         assert "course-danger-details-v2" in response.text

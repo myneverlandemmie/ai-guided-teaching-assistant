@@ -33,12 +33,13 @@ def test_lesson_drafts_template_has_local_generation_status_targets() -> None:
 
     for status_id in ["diagnostic-probe-status", "guide-low-status", "guide-mid-status", "guide-high-status"]:
         assert status_id in template
-    assert "data-loading-target=\"diagnostic-probe-status\"" in template
-    assert "data-loading-target=\"guide-low-status\"" in template
-    assert "data-loading-target=\"guide-mid-status\"" in template
-    assert "data-loading-target=\"guide-high-status\"" in template
-    assert "clickedButton.textContent = 'AI 正在生成，请稍候...'" in script
-    assert "button !== clickedButton" in script
+    assert "data-status-target=\"diagnostic-probe-status\"" in template
+    assert "data-status-target=\"guide-low-status\"" in template
+    assert "data-status-target=\"guide-mid-status\"" in template
+    assert "data-status-target=\"guide-high-status\"" in template
+    assert "data-ai-generation-form" in template
+    assert "clickedButton.textContent = form.getAttribute('data-loading-label')" in script
+    assert "form.querySelectorAll" in script
     assert "activateDraftTab" in script
     assert "data-draft-tab-target" in template
     assert "data-draft-editor-panel" in template

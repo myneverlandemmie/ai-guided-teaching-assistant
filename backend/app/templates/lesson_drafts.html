@@ -66,9 +66,9 @@
             <p class="draft-existing-note">已有草稿，可在下方编辑区查看。</p>
           {% endif %}
           <p id="diagnostic-probe-status" class="generation-status" role="status" aria-live="polite">AI 正在生成课前学情测试，请稍候……生成内容为草稿，需教师审核、修改与确认。</p>
-          <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/diagnostic_probe" data-draft-generation-form data-loading-target="diagnostic-probe-status" onsubmit="return handleLessonDraftGenerationSubmit(event, this);">
+          <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/diagnostic_probe" data-ai-generation-form data-draft-generation-form data-status-target="diagnostic-probe-status" onsubmit="return handleLessonDraftGenerationSubmit(event, this);">
             <div class="action-row">
-              <button class="button-primary" type="submit" data-draft-generation-button>生成课前学情测试</button>
+              <button class="button-primary" type="submit" data-ai-generation-button data-draft-generation-button>生成课前学情测试</button>
             </div>
           </form>
         {% else %}
@@ -90,9 +90,9 @@
               <p class="draft-existing-note">已有草稿，可在下方编辑区查看。</p>
             {% endif %}
             <p id="guide-low-status" class="generation-status" role="status" aria-live="polite">AI 正在生成基础版导学案，请稍候……生成内容为草稿，需教师审核、修改与确认。</p>
-            <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_low" data-draft-generation-form data-loading-target="guide-low-status" onsubmit="return handleLessonDraftGenerationSubmit(event, this);">
+            <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_low" data-ai-generation-form data-draft-generation-form data-status-target="guide-low-status" onsubmit="return handleLessonDraftGenerationSubmit(event, this);">
               <div class="action-row">
-                <button class="button-primary" type="submit" data-draft-generation-button>生成基础版导学案</button>
+                <button class="button-primary" type="submit" data-ai-generation-button data-draft-generation-button>生成基础版导学案</button>
               </div>
             </form>
           {% else %}
@@ -114,9 +114,9 @@
                 <p class="draft-existing-note">已有草稿，可在下方编辑区查看。</p>
               {% endif %}
               <p id="guide-mid-status" class="generation-status" role="status" aria-live="polite">AI 正在生成巩固提升任务包，请稍候……其他草稿不会被覆盖。</p>
-              <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_mid" data-draft-generation-form data-loading-target="guide-mid-status" onsubmit="return handleLessonDraftGenerationSubmit(event, this);">
+              <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_mid" data-ai-generation-form data-draft-generation-form data-status-target="guide-mid-status" onsubmit="return handleLessonDraftGenerationSubmit(event, this);">
                 <div class="action-row">
-                  <button class="button-primary" type="submit" data-draft-generation-button>生成巩固提升任务包</button>
+                  <button class="button-primary" type="submit" data-ai-generation-button data-draft-generation-button>生成巩固提升任务包</button>
                 </div>
               </form>
             {% else %}
@@ -137,9 +137,9 @@
                 <p class="draft-existing-note">已有草稿，可在下方编辑区查看。</p>
               {% endif %}
               <p id="guide-high-status" class="generation-status" role="status" aria-live="polite">AI 正在生成拓展探究任务包，请稍候……其他草稿不会被覆盖。</p>
-              <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_high" data-draft-generation-form data-loading-target="guide-high-status" onsubmit="return handleLessonDraftGenerationSubmit(event, this);">
+              <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_high" data-ai-generation-form data-draft-generation-form data-status-target="guide-high-status" onsubmit="return handleLessonDraftGenerationSubmit(event, this);">
                 <div class="action-row">
-                  <button class="button-primary" type="submit" data-draft-generation-button>生成拓展探究任务包</button>
+                  <button class="button-primary" type="submit" data-ai-generation-button data-draft-generation-button>生成拓展探究任务包</button>
                 </div>
               </form>
             {% else %}

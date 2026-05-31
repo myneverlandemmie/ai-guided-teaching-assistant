@@ -256,6 +256,27 @@ async def test_upload_page_uses_safe_return_to_for_v2_entry(tmp_path: Path) -> N
         assert 'href="https://evil.example/path"' not in unsafe_response.text
         assert 'href="/courses"' in unsafe_response.text
         assert "智学导评 V0.2" not in unsafe_response.text
+
+        upload_response = await client.post(
+            f"/courses/{course.id}/course-plan/upload",
+            data={"return_to": "/ui-v2/courses"},
+            files={
+                "file": (
+                    SAMPLE_PLAN.name,
+                    SAMPLE_PLAN.read_bytes(),
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+            follow_redirects=False,
+        )
+        assert upload_response.status_code == 303
+        assert upload_response.headers["location"].endswith("?return_to=%2Fui-v2%2Fcourses")
+        preview_response = await client.get(upload_response.headers["location"])
+        assert preview_response.status_code == 200
+        assert "智学导评 V0.2" in preview_response.text
+        assert "课程列表" not in preview_response.text
+        assert 'href="/ui-v2/courses"' in preview_response.text
+        assert 'name="return_to" value="/ui-v2/courses"' in preview_response.text
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
@@ -333,9 +354,16 @@ async def test_preview_page_shows_import_result(tmp_path: Path) -> None:
 
         assert preview_response.status_code == 200
         assert "授课计划导入结果" in preview_response.text
-        assert "planned lessons 数量：28" in preview_response.text
+        assert "课次预览数量：28" in preview_response.text
+        assert "课次预览与选择" in preview_response.text
+        assert "planned lessons" not in preview_response.text
+        assert "content_raw" not in preview_response.text
+        assert "选择生成正式课次" in preview_response.text
+        assert "教学内容摘要" not in preview_response.text
+        assert "作业/提示" in preview_response.text
+        assert "备注" in preview_response.text
         assert "success" in preview_response.text
-        assert "lesson_title" in preview_response.text
+        assert "课次标题" in preview_response.text
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
@@ -505,10 +533,12 @@ async def test_lessons_list_links_to_v2_materials_outline(tmp_path: Path) -> Non
         assert response.status_code == 200
         assert "查看详情" not in response.text
         assert "作业提示" not in response.text
-        assert "资料主干" in response.text
+        assert "资料与主干" in response.text
+        assert "资料主干" not in response.text
         assert "学情测试" in response.text
         assert "导学案" in response.text
         assert "/ui-v2/lessons/1/materials-outline" in response.text
+        assert f"/courses/{course.id}/course-plan/upload?return_to=/ui-v2/courses" in response.text
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
@@ -1418,8 +1448,14 @@ async def test_ai_settings_can_set_mask_and_clear_session_key(tmp_path: Path) ->
         assert "DEEPSEEK_DEFAULT_MODEL" in page_response.text
         assert "项目根目录" in page_response.text
         assert ".env.example" in page_response.text
-        assert "https://api-docs.deepseek.com/zh-cn/api/list-models" in page_response.text
-        assert "https://api-docs.deepseek.com/zh-cn/api/create-chat-completion" in page_response.text
+        assert 'href="/ui-v2/courses"' in page_response.text
+        assert "课程列表" not in page_response.text
+        assert "ai-settings-form-v2" in page_response.text
+        assert "ui-v2-field" in page_response.text
+        assert "https://api-docs.deepseek.com/zh-cn/quick_start/pricing" in page_response.text
+        assert "DeepSeek 官方模型与价格" in page_response.text
+        assert "Chat Completion" not in page_response.text
+        assert "create-chat-completion" not in page_response.text
 
         save_response = await client.post(
             "/ai/settings",

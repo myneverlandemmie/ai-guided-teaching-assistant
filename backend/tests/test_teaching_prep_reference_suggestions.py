@@ -100,6 +100,9 @@ def test_teaching_prep_reference_prompt_document_exists_and_keeps_boundary() -> 
 
     assert "备课参考建议" in content
     assert "教师确认声明" in content
+    assert "标准 Markdown" in content
+    assert "## 一、材料概况" in content
+    assert "## 八、教师确认声明" in content
     assert all("教案诊断" not in heading for heading in headings)
     assert all("AI 自动备课" not in heading for heading in headings)
     assert all("一键生成教案" not in heading for heading in headings)
@@ -115,10 +118,12 @@ async def test_materials_outline_v2_shows_teaching_prep_reference_entry(tmp_path
         assert response.status_code == 200
         assert "备课参考建议" in response.text
         assert "生成备课参考建议" in response.text
-        assert "不替代教师教学判断" in response.text
+        assert "供教师选择性参考" in response.text
         assert "本建议参考公开课、汇报课、教学能力比赛等较高标准材料的常见结构" in response.text
         assert "整理资料、生成知识主干，并可获取备课参考建议。" in response.text
         assert "完成资料整理、知识主干确认和备课参考建议查看后" in response.text
+        assert 'data-status-target="teaching-prep-reference-generation-hint"' in response.text
+        assert "AI 正在生成备课参考建议" in response.text
         assert "教案诊断" not in response.text
         assert "自动备课" not in response.text
         assert "一键生成教案" not in response.text

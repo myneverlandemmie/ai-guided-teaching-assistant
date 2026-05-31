@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app import main
 from app.db.base import create_database_tables
 from app.models.course import Course
+from app.models.course_plan import CoursePlanUpload, PlannedLesson
 from app.models.knowledge_outline import KnowledgeOutline
 from app.models.lesson import Lesson, LessonMaterial
 from app.services.ai.provider import GeneratedOutline
@@ -98,13 +99,72 @@ async def test_lessons_and_detail_pages_link_to_materials_outline_v2(tmp_path: P
         assert "|" in lessons_response.text
         assert "查看详情" not in lessons_response.text
         assert "作业提示" not in lessons_response.text
-        assert "资料主干" in lessons_response.text
+        assert "教学内容摘要" not in lessons_response.text
+        assert "资料与主干" in lessons_response.text
+        assert "资料主干" not in lessons_response.text
         assert "学情测试" in lessons_response.text
         assert "导学案" in lessons_response.text
         assert f"/ui-v2/lessons/{lesson_id}/materials-outline" in lessons_response.text
         assert detail_response.status_code == 200
         assert "进入 V2：课次资料与知识主干" in detail_response.text
         assert f"/ui-v2/lessons/{lesson_id}/materials-outline" in detail_response.text
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_lessons_list_uses_planned_lesson_notes_for_summary_column(tmp_path: Path) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    with session_factory() as session:
+        course = Course(title="电工电子基础", semester="2025-2026-2", status="draft")
+        session.add(course)
+        session.flush()
+        upload = CoursePlanUpload(
+            course_id=course.id,
+            original_filename="plan.xlsx",
+            file_path="/tmp/plan.xlsx",
+            parsed_status="success",
+        )
+        session.add(upload)
+        session.flush()
+        planned = PlannedLesson(
+            course_plan_upload_id=upload.id,
+            course_id=course.id,
+            week="5",
+            lesson_no="1",
+            hours="2",
+            lesson_code="0501",
+            lesson_title="三极管放大电路",
+            content_raw="内部原始内容不应直接展示",
+            homework="完成练习",
+            notes="重点观察输入信号和输出信号变化",
+            status="confirmed",
+        )
+        session.add(planned)
+        session.flush()
+        lesson = Lesson(
+            course_id=course.id,
+            planned_lesson_id=planned.id,
+            week="5",
+            lesson_no="1",
+            hours="2",
+            lesson_code="0501",
+            title="三极管放大电路",
+            content_summary="内部原始内容不应直接展示",
+            homework_hint="完成练习",
+            status="draft",
+        )
+        session.add(lesson)
+        session.commit()
+        course_id = course.id
+    try:
+        response = await client.get(f"/courses/{course_id}/lessons")
+
+        assert response.status_code == 200
+        assert "教学内容摘要" in response.text
+        assert "重点观察输入信号和输出信号变化" in response.text
+        assert "内部原始内容不应直接展示" not in response.text
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
@@ -128,13 +188,20 @@ async def test_lesson_materials_outline_v2_page_shows_materials_and_forms(tmp_pa
         assert "上传课次资料" in response.text
         assert f'action="/lessons/{lesson_id}/materials"' in response.text
         assert f'name="return_to" value="/ui-v2/lessons/{lesson_id}/materials-outline"' in response.text
+        assert "资料类别" in response.text
+        assert 'name="material_category"' in response.text
+        assert "教案" in response.text
+        assert "PPT / 课件" in response.text
         assert 'name="files"' in response.text
         assert "粘贴补充资料" in response.text
         assert 'name="content"' in response.text
         assert "实验步骤" in response.text
+        assert "资料类别：粘贴文本" in response.text
         assert "连接光敏传感器" in response.text
         assert f'action="/lesson-materials/' in response.text
         assert "生成知识主干" in response.text
+        assert "data-ai-generation-form" in response.text
+        assert 'data-status-target="outline-v2-generation-hint"' in response.text
         assert "智学导评 V0.2" in response.text
         assert "|" in response.text
         assert "返回课程中心 V2" not in response.text
@@ -157,6 +224,8 @@ async def test_lesson_materials_outline_v2_shows_outline_editor_when_outline_exi
         assert response.status_code == 200
         assert "知识主干草稿" in response.text
         assert "保存教师修改" in response.text
+        assert "已由教师复核，可继续修改或重新生成。" in response.text
+        assert "正在生成知识主干" not in response.text
         assert 'action="/knowledge-outlines/' in response.text
         assert '/save"' in response.text
         assert f'name="return_to" value="/ui-v2/lessons/{lesson_id}/materials-outline"' in response.text
@@ -174,8 +243,9 @@ async def test_material_post_with_return_to_redirects_back_to_v2(tmp_path: Path)
         response = await client.post(
             f"/lessons/{lesson_id}/materials",
             data={
-                "material_type": "pasted_text",
-                "title": "补充说明",
+                "input_mode": "pasted_text",
+                "material_category": "lesson_plan",
+                "title": "",
                 "content": "课堂补充说明",
                 "return_to": return_to,
             },
@@ -183,6 +253,11 @@ async def test_material_post_with_return_to_redirects_back_to_v2(tmp_path: Path)
 
         assert response.status_code == 303
         assert response.headers["location"] == return_to
+        with session_factory() as session:
+            material = session.query(LessonMaterial).filter(LessonMaterial.lesson_id == lesson_id).order_by(LessonMaterial.id.desc()).first()
+            assert material is not None
+            assert material.material_type == "lesson_plan"
+            assert material.title == "0302-教案"
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()

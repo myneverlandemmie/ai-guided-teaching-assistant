@@ -1,6 +1,23 @@
 {% extends "base.html" %}
 {% block title %}AI 设置{% endblock %}
+{% block top_nav %}
+  <div class="ui-v2-shell ai-settings-v2">
+    <nav class="v2-topbar" aria-label="V2 产品导航">
+      <a class="v2-brand" href="/ui-v2/courses">
+        <span class="v2-brand-mark" aria-hidden="true"></span>
+        <span>智学导评 V0.2</span>
+      </a>
+      <div class="v2-breadcrumb">
+        <span>课程中心</span>
+        <span class="v2-breadcrumb-separator">|</span>
+        <span>AI 设置</span>
+      </div>
+      <a class="v2-topbar-link" href="/ui-v2/courses">返回课程中心</a>
+    </nav>
+  </div>
+{% endblock %}
 {% block content %}
+<div class="ui-v2-shell ai-settings-page-v2">
 <h1>AI 设置</h1>
 <section class="card">
   <h2>当前会话 DeepSeek API Key</h2>
@@ -20,14 +37,16 @@
 
 <section class="card">
   <h2>设置当前会话 Key 和模型</h2>
-  <form method="post" action="/ai/settings">
+  <form class="ai-settings-form-v2" method="post" action="/ai/settings">
     {% if next_path %}
       <input type="hidden" name="next" value="{{ next_path }}">
       <p>保存后将返回：{{ next_path }}</p>
     {% endif %}
-    <label for="api_key">DeepSeek API Key</label><br>
-    <input id="api_key" name="api_key" type="password" autocomplete="off" style="width:100%; max-width: 36rem;" required>
-    <p>
+    <div class="ui-v2-field">
+      <label for="api_key">DeepSeek API Key</label>
+      <input id="api_key" name="api_key" type="password" autocomplete="off" required>
+    </div>
+    <div class="ui-v2-field">
       <label for="selected_model">知识主干生成模型</label><br>
       <select id="selected_model" name="selected_model">
         {% for model in allowed_models %}
@@ -36,10 +55,10 @@
           </option>
         {% endfor %}
       </select>
-    </p>
-    <p><button type="submit">保存到当前会话</button></p>
+    </div>
+    <div class="ai-settings-form-actions-v2"><button type="submit">保存到当前会话</button></div>
   </form>
-  <form method="post" action="/ai/settings/clear">
+  <form class="ai-settings-clear-form-v2" method="post" action="/ai/settings/clear">
     <button type="submit">清除当前 Key</button>
   </form>
 </section>
@@ -52,9 +71,8 @@
   <p>模型选用建议：<code>deepseek-v4-pro</code> 更适合知识主干生成、课程思政与职业素养融入点、正式案例展示和争议样本复核；<code>deepseek-v4-flash</code> 更适合日常快速预览、批量反馈初稿和调试页面流程。知识主干正式演示建议优先使用 <code>deepseek-v4-pro</code>，批量反馈或调试建议优先使用 <code>deepseek-v4-flash</code>。</p>
   <p>
     DeepSeek 官方文档：
-    <a href="https://api-docs.deepseek.com/zh-cn/api/list-models" target="_blank" rel="noopener noreferrer">模型列表</a>
-    ｜
-    <a href="https://api-docs.deepseek.com/zh-cn/api/create-chat-completion" target="_blank" rel="noopener noreferrer">Chat Completion</a>
+    <a href="https://api-docs.deepseek.com/zh-cn/quick_start/pricing" target="_blank" rel="noopener noreferrer">DeepSeek 官方模型与价格</a>
   </p>
 </section>
+</div>
 {% endblock %}

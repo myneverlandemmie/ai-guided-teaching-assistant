@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from types import SimpleNamespace
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -78,13 +78,15 @@ CHAOXING_EXPORT_DIR = PROJECT_ROOT / "data" / "exports" / "chaoxing"
 GUIDE_EXPORT_DIR = PROJECT_ROOT / "data" / "exports" / "guides"
 MATERIAL_TYPE_LABELS = {
     "pasted_text": "粘贴文本",
-    "lesson_plan": "教案（DOCX）",
-    "course_ppt": "课程 PPT（PPTX）",
-    "training_guide": "实训指导书（MD / DOCX）",
-    "supplementary": "补充资料（TXT / MD / DOCX / PPTX）",
+    "lesson_plan": "教案",
+    "course_ppt": "PPT课件",
+    "training_guide": "实训指导书",
+    "task_sheet": "任务书 / 学习单",
+    "evaluation_sheet": "评价表 / 记录表",
+    "supplementary": "补充材料",
     "text": "粘贴文本",
-    "ppt_text": "课程 PPT（PPTX）",
-    "other": "补充资料",
+    "ppt_text": "PPT课件",
+    "other": "其他",
 }
 LESSON_STATUS_LABELS = {"draft": "草稿", "published": "已发布", "archived": "已归档"}
 KNOWLEDGE_OUTLINE_STATUS_LABELS = {"draft": "草稿", "reviewed": "已复核", "published": "已发布"}
@@ -98,10 +100,22 @@ LESSON_DRAFT_DOWNLOAD_NAME_PARTS = {
 DEFAULT_MATERIAL_TITLE_LABELS = {
     "pasted_text": "粘贴文本",
     "lesson_plan": "教案",
-    "course_ppt": "课程PPT",
+    "course_ppt": "PPT课件",
     "training_guide": "实训指导书",
-    "supplementary": "补充资料",
+    "task_sheet": "任务书",
+    "evaluation_sheet": "评价表",
+    "supplementary": "补充材料",
+    "other": "其他资料",
 }
+MATERIAL_CATEGORY_OPTIONS = [
+    ("lesson_plan", "教案"),
+    ("course_ppt", "PPT / 课件"),
+    ("training_guide", "实训指导书"),
+    ("task_sheet", "任务书 / 学习单"),
+    ("evaluation_sheet", "评价表 / 记录表"),
+    ("supplementary", "补充材料"),
+    ("other", "其他"),
+]
 
 
 def sanitize_next_path(next_path: str | None) -> str | None:
@@ -230,6 +244,12 @@ def _generate_lesson_material_title(
     while f"{base_title}（{index}）" in existing_titles:
         index += 1
     return f"{base_title}（{index}）"
+
+
+def _lesson_material_category_label(material: LessonMaterial) -> str:
+    """返回教师可见的资料类别。"""
+
+    return MATERIAL_TYPE_LABELS.get(material.material_type, MATERIAL_TYPE_LABELS.get("other", "其他"))
 
 
 def _get_latest_knowledge_outline(db: Session, lesson_id: int) -> KnowledgeOutline | None:
@@ -589,7 +609,10 @@ async def upload_course_plan(
 
     result = import_course_plan(db, course, saved_path, safe_filename)
     upload = result["upload"]
-    return RedirectResponse(url=f"/course-plan-uploads/{upload.id}", status_code=303)
+    preview_url = f"/course-plan-uploads/{upload.id}"
+    if safe_return_to != "/courses":
+        preview_url = f"{preview_url}?return_to={quote(safe_return_to, safe='')}"
+    return RedirectResponse(url=preview_url, status_code=303)
 
 
 @app.get("/course-plan-uploads/{upload_id}", response_class=HTMLResponse)
@@ -613,6 +636,7 @@ async def show_course_plan_preview(
         .where(PlannedLesson.course_plan_upload_id == upload.id)
         .order_by(PlannedLesson.id)
     ).all()
+    return_to = sanitize_next_path(request.query_params.get("return_to")) or "/courses"
 
     return templates.TemplateResponse(
         request,
@@ -622,6 +646,7 @@ async def show_course_plan_preview(
             "course": upload.course,
             "planned_lessons": planned_lessons,
             "planned_lesson_count": len(planned_lessons),
+            "return_to": return_to,
         },
     )
 
@@ -643,6 +668,7 @@ async def confirm_course_plan_upload(
         raise HTTPException(status_code=404, detail="授课计划上传记录不存在")
 
     form = await request.form()
+    return_to = sanitize_next_path(str(form.get("return_to", ""))) or ""
     selected_ids = {int(value) for value in form.getlist("planned_lesson_ids")}
     planned_lessons = db.scalars(
         select(PlannedLesson)
@@ -678,14 +704,21 @@ async def list_lessons(
 
     lessons = db.scalars(
         select(Lesson)
+        .options(selectinload(Lesson.planned_lesson))
         .where(Lesson.course_id == course.id)
         .order_by(Lesson.id)
     ).all()
+    show_notes_column = any((lesson.planned_lesson and lesson.planned_lesson.notes.strip()) for lesson in lessons)
 
     return templates.TemplateResponse(
         request,
         "lessons.html",
-        {"course": course, "lessons": lessons, "lesson_count": len(lessons)},
+        {
+            "course": course,
+            "lessons": lessons,
+            "lesson_count": len(lessons),
+            "show_notes_column": show_notes_column,
+        },
     )
 
 
@@ -758,6 +791,8 @@ async def show_lesson_materials_outline_v2(
             "materials": materials,
             "knowledge_outline": knowledge_outline,
             "material_type_labels": MATERIAL_TYPE_LABELS,
+            "material_category_options": MATERIAL_CATEGORY_OPTIONS,
+            "material_category_label": _lesson_material_category_label,
             "knowledge_outline_status_labels": KNOWLEDGE_OUTLINE_STATUS_LABELS,
             "teaching_prep_reference": teaching_prep_reference,
             "draft_status_labels": LESSON_DRAFT_STATUS_LABELS,
@@ -779,6 +814,8 @@ def _lesson_material_context(db: Session, lesson: Lesson, error_message: str | N
         "materials": materials,
         "error_message": error_message,
         "material_type_labels": MATERIAL_TYPE_LABELS,
+        "material_category_options": MATERIAL_CATEGORY_OPTIONS,
+        "material_category_label": _lesson_material_category_label,
         "lesson_status_labels": LESSON_STATUS_LABELS,
         "knowledge_outline": knowledge_outline,
         "knowledge_outline_status_labels": KNOWLEDGE_OUTLINE_STATUS_LABELS,
@@ -791,6 +828,8 @@ async def add_lesson_material(
     request: Request,
     title: str = Form(""),
     material_type: str = Form("pasted_text"),
+    input_mode: str = Form(""),
+    material_category: str = Form(""),
     content: str = Form(""),
     return_to: str = Form(""),
     files: list[UploadFile] | None = File(None),
@@ -804,8 +843,12 @@ async def add_lesson_material(
         raise HTTPException(status_code=404, detail="课次不存在")
 
     title_text = title.strip()
+    effective_material_type = material_category.strip() or material_type
+    if effective_material_type not in MATERIAL_TYPE_LABELS:
+        effective_material_type = "supplementary"
     uploaded_files = [uploaded_file for uploaded_file in (files or []) if uploaded_file.filename]
-    if material_type == "pasted_text":
+    is_pasted_text = input_mode == "pasted_text" or (not input_mode and material_type == "pasted_text")
+    if is_pasted_text:
         material_content = content.strip()
         if not material_content:
             return templates.TemplateResponse(
@@ -816,8 +859,8 @@ async def add_lesson_material(
             )
         material = LessonMaterial(
             lesson_id=lesson.id,
-            material_type=material_type,
-            title=_generate_lesson_material_title(db, lesson, material_type, title_text),
+            material_type=effective_material_type,
+            title=_generate_lesson_material_title(db, lesson, effective_material_type, title_text),
             content=material_content,
             file_path=None,
         )
@@ -858,8 +901,8 @@ async def add_lesson_material(
         requested_title = f"{title_text} - {safe_filename}" if title_text and multiple_files else title_text
         material = LessonMaterial(
             lesson_id=lesson.id,
-            material_type=material_type,
-            title=_generate_lesson_material_title(db, lesson, material_type, requested_title),
+            material_type=effective_material_type,
+            title=_generate_lesson_material_title(db, lesson, effective_material_type, requested_title),
             content=file_content,
             file_path=str(saved_path),
         )
@@ -953,6 +996,8 @@ async def generate_lesson_knowledge_outline(
                     "materials": materials,
                     "knowledge_outline": _get_latest_knowledge_outline(db, lesson.id),
                     "material_type_labels": MATERIAL_TYPE_LABELS,
+                    "material_category_options": MATERIAL_CATEGORY_OPTIONS,
+                    "material_category_label": _lesson_material_category_label,
                     "knowledge_outline_status_labels": KNOWLEDGE_OUTLINE_STATUS_LABELS,
                     "teaching_prep_reference": _get_lesson_draft_by_type(
                         db,
