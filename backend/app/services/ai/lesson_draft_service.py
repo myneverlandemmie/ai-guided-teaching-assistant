@@ -17,6 +17,7 @@ DRAFT_TYPE_LABELS = {
     "guide_low": "全班通用导学案 / 基础版导学案",
     "guide_mid": "巩固提升任务包",
     "guide_high": "拓展探究任务包",
+    "teaching_prep_reference": "备课参考建议",
 }
 CHAOXING_HEADERS = [
     "目录",

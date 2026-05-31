@@ -48,11 +48,10 @@ def test_public_draft_labels_and_download_names_do_not_expose_internal_tiers() -
     assert DRAFT_TYPE_LABELS["guide_low"] == "全班通用导学案 / 基础版导学案"
     assert DRAFT_TYPE_LABELS["guide_mid"] == "巩固提升任务包"
     assert DRAFT_TYPE_LABELS["guide_high"] == "拓展探究任务包"
-    assert main.LESSON_DRAFT_DOWNLOAD_NAME_PARTS == {
-        "guide_low": "core_learning_guide",
-        "guide_mid": "enhancement_task_pack",
-        "guide_high": "extension_challenge_pack",
-    }
+    assert main.LESSON_DRAFT_DOWNLOAD_NAME_PARTS["guide_low"] == "core_learning_guide"
+    assert main.LESSON_DRAFT_DOWNLOAD_NAME_PARTS["guide_mid"] == "enhancement_task_pack"
+    assert main.LESSON_DRAFT_DOWNLOAD_NAME_PARTS["guide_high"] == "extension_challenge_pack"
+    assert main.LESSON_DRAFT_DOWNLOAD_NAME_PARTS["teaching_prep_reference"] == "teaching_prep_reference_suggestions"
     assert "guide_low" not in set(main.LESSON_DRAFT_DOWNLOAD_NAME_PARTS.values())
     assert "guide_mid" not in set(main.LESSON_DRAFT_DOWNLOAD_NAME_PARTS.values())
     assert "guide_high" not in set(main.LESSON_DRAFT_DOWNLOAD_NAME_PARTS.values())

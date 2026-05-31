@@ -10,21 +10,27 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 
-LESSON_DRAFT_TYPES = {"diagnostic_probe", "guide_low", "guide_mid", "guide_high"}
+LESSON_DRAFT_TYPES = {
+    "diagnostic_probe",
+    "guide_low",
+    "guide_mid",
+    "guide_high",
+    "teaching_prep_reference",
+}
 LESSON_DRAFT_STATUSES = {"draft", "reviewed"}
 
 
 class LessonDraft(Base):
     """基于知识主干生成的教师草稿。
 
-    V0.2 先保存导学案前测和三阶导学案草稿，不做学生端发布。
+    V0.2 先保存导学案前测、学生导学案任务包和备课参考建议草稿，不做学生端发布。
     """
 
     __tablename__ = "lesson_drafts"
     __table_args__ = (
         UniqueConstraint("lesson_id", "draft_type", name="uq_lesson_drafts_lesson_type"),
         CheckConstraint(
-            "draft_type in ('diagnostic_probe', 'guide_low', 'guide_mid', 'guide_high')",
+            "draft_type in ('diagnostic_probe', 'guide_low', 'guide_mid', 'guide_high', 'teaching_prep_reference')",
             name="ck_lesson_drafts_draft_type",
         ),
         CheckConstraint("status in ('draft', 'reviewed')", name="ck_lesson_drafts_status"),

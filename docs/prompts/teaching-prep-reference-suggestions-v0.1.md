@@ -1,7 +1,7 @@
 # Teaching Prep Reference Suggestions v0.1 / 备课参考建议 Prompt v0.1
 
 > 适用模块：智学导评 V0.2｜备课参考建议  
-> 文档性质：Markdown Prompt 资产。当前阶段不接页面、不接 API、不新增数据库表或路由。  
+> 文档性质：Markdown Prompt 资产。V0.2 当前已作为“备课参考建议”轻量后台功能的 Prompt 边界来源。  
 > 使用定位：AI 基于教师上传材料提供第二视角，供教师选择性参考，最终以教师判断为准。
 
 ## 1. 使用边界

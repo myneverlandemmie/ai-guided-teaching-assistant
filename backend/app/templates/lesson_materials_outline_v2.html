@@ -48,7 +48,7 @@
     <article class="flow-step-v2 is-current">
       <span>2</span>
       <strong>课次资料与知识主干</strong>
-      <p>整理资料并生成本课知识结构。</p>
+      <p>整理资料、生成知识主干，并可获取备课参考建议。</p>
     </article>
     <article class="flow-step-v2">
       <span>3</span>
@@ -65,7 +65,7 @@
   <section class="materials-next-v2" aria-label="下一阶段入口">
     <div>
       <span class="eyebrow-v2">下一阶段</span>
-      <p>完成资料整理和知识主干确认后，可继续生成课前学情测试和学生导学案。</p>
+      <p>完成资料整理、知识主干确认和备课参考建议查看后，可继续生成课前学情测试和学生导学案。</p>
     </div>
     <div class="materials-next-actions-v2">
       <a class="v2-action-button v2-action-button--secondary" href="/lessons/{{ lesson.id }}/drafts">进入课前学情测试</a>
@@ -200,6 +200,48 @@
           <p>当前课次还没有知识主干。请先添加资料，再生成知识主干草稿。</p>
         </div>
       {% endif %}
+    </div>
+  </section>
+
+  <section class="teaching-prep-reference-v2">
+    <div class="section-head-v2">
+      <div>
+        <span class="eyebrow-v2">备课参考</span>
+        <h2>备课参考建议</h2>
+      </div>
+      <p>基于本课资料与知识主干生成备课参考建议，供教师审阅、修改与取舍，不替代教师教学判断。</p>
+    </div>
+
+    <div class="prep-reference-grid-v2">
+      <article class="prep-reference-summary-v2">
+        <h3>辅助定位</h3>
+        <p>本功能提供教学结构提醒、材料质量与教学重心提醒、学情风险提醒和可选改进建议。</p>
+        <p class="course-note-v2">本建议参考公开课、汇报课、教学能力比赛等较高标准材料的常见结构，仅用于提供第二视角。日常备课不必逐项满足，教师可结合班级基础、课时条件和实际教学安排选择性采纳。</p>
+        <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/teaching_prep_reference">
+          <input type="hidden" name="return_to" value="{{ v2_return_to }}">
+          <button type="submit">生成备课参考建议</button>
+        </form>
+      </article>
+
+      <article class="prep-reference-editor-v2">
+        {% if teaching_prep_reference %}
+          <div class="prep-reference-actions-v2">
+            <a class="button-link button-ghost" href="/lessons/{{ lesson.id }}/drafts/{{ teaching_prep_reference.id }}/download-md">下载 Markdown</a>
+          </div>
+          <form method="post" action="/lessons/{{ lesson.id }}/drafts/{{ teaching_prep_reference.id }}/save">
+            <input type="hidden" name="return_to" value="{{ v2_return_to }}">
+            <label for="teaching-prep-title-v2">建议标题</label>
+            <input id="teaching-prep-title-v2" name="title" type="text" value="{{ teaching_prep_reference.title }}">
+            <label for="teaching-prep-content-v2">建议内容</label>
+            <textarea id="teaching-prep-content-v2" name="content" rows="18">{{ teaching_prep_reference.content }}</textarea>
+            <button type="submit">保存教师修改</button>
+          </form>
+        {% else %}
+          <div class="empty-v2">
+            <p>当前还没有备课参考建议。生成后可在这里查看、编辑并保存教师修改。</p>
+          </div>
+        {% endif %}
+      </article>
     </div>
   </section>
 </div>

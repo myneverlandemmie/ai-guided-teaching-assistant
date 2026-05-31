@@ -64,6 +64,10 @@ from app.services.lesson_materials.document_text_extractor import (
     SUPPORTED_MATERIAL_SUFFIXES,
     extract_text_from_lesson_material,
 )
+from app.services.teaching_prep_reference_service import (
+    TEACHING_PREP_REFERENCE_DRAFT_TYPE,
+    generate_teaching_prep_reference,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
@@ -89,6 +93,7 @@ LESSON_DRAFT_DOWNLOAD_NAME_PARTS = {
     "guide_low": "core_learning_guide",
     "guide_mid": "enhancement_task_pack",
     "guide_high": "extension_challenge_pack",
+    TEACHING_PREP_REFERENCE_DRAFT_TYPE: "teaching_prep_reference_suggestions",
 }
 DEFAULT_MATERIAL_TITLE_LABELS = {
     "pasted_text": "粘贴文本",
@@ -247,10 +252,20 @@ def _get_lesson_drafts(db: Session, lesson_id: int) -> list[LessonDraft]:
     ).all()
 
 
+def _get_lesson_draft_by_type(db: Session, lesson_id: int, draft_type: str) -> LessonDraft | None:
+    """读取某课次指定类型草稿。"""
+
+    return db.scalar(
+        select(LessonDraft)
+        .where(LessonDraft.lesson_id == lesson_id, LessonDraft.draft_type == draft_type)
+        .order_by(LessonDraft.id.desc())
+    )
+
+
 def _upsert_lesson_drafts(
     db: Session,
     lesson: Lesson,
-    outline: KnowledgeOutline,
+    outline: KnowledgeOutline | None,
     generated_drafts: list[object],
 ) -> None:
     """按 lesson_id + draft_type 更新当前草稿，不保留历史版本。"""
@@ -266,7 +281,7 @@ def _upsert_lesson_drafts(
         if draft is None:
             draft = LessonDraft(
                 lesson_id=lesson.id,
-                source_outline_id=outline.id,
+                source_outline_id=outline.id if outline else None,
                 draft_type=generated.draft_type,
                 title=generated.title,
                 content=generated.content,
@@ -275,7 +290,7 @@ def _upsert_lesson_drafts(
             )
             db.add(draft)
         else:
-            draft.source_outline_id = outline.id
+            draft.source_outline_id = outline.id if outline else None
             draft.title = generated.title
             draft.content = generated.content
             draft.status = "draft"
@@ -734,6 +749,7 @@ async def show_lesson_materials_outline_v2(
         .order_by(LessonMaterial.id.desc())
     ).all()
     knowledge_outline = _get_latest_knowledge_outline(db, lesson.id)
+    teaching_prep_reference = _get_lesson_draft_by_type(db, lesson.id, TEACHING_PREP_REFERENCE_DRAFT_TYPE)
     return templates.TemplateResponse(
         request,
         "lesson_materials_outline_v2.html",
@@ -743,6 +759,8 @@ async def show_lesson_materials_outline_v2(
             "knowledge_outline": knowledge_outline,
             "material_type_labels": MATERIAL_TYPE_LABELS,
             "knowledge_outline_status_labels": KNOWLEDGE_OUTLINE_STATUS_LABELS,
+            "teaching_prep_reference": teaching_prep_reference,
+            "draft_status_labels": LESSON_DRAFT_STATUS_LABELS,
         },
     )
 
@@ -936,6 +954,12 @@ async def generate_lesson_knowledge_outline(
                     "knowledge_outline": _get_latest_knowledge_outline(db, lesson.id),
                     "material_type_labels": MATERIAL_TYPE_LABELS,
                     "knowledge_outline_status_labels": KNOWLEDGE_OUTLINE_STATUS_LABELS,
+                    "teaching_prep_reference": _get_lesson_draft_by_type(
+                        db,
+                        lesson.id,
+                        TEACHING_PREP_REFERENCE_DRAFT_TYPE,
+                    ),
+                    "draft_status_labels": LESSON_DRAFT_STATUS_LABELS,
                     "error_message": exc.user_message,
                 },
                 status_code=400,
@@ -1061,6 +1085,44 @@ async def generate_lesson_drafts_route(
     return RedirectResponse(url=f"/lessons/{lesson.id}/drafts{suffix}", status_code=303)
 
 
+@app.post("/lessons/{lesson_id}/drafts/generate/teaching_prep_reference")
+async def generate_teaching_prep_reference_route(
+    lesson_id: int,
+    request: Request,
+    return_to: str = Form(""),
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    """生成或更新备课参考建议草稿。"""
+
+    lesson = db.scalar(
+        select(Lesson)
+        .options(selectinload(Lesson.materials), selectinload(Lesson.course))
+        .where(Lesson.id == lesson_id)
+    )
+    if lesson is None:
+        raise HTTPException(status_code=404, detail="课次不存在")
+
+    materials = db.scalars(
+        select(LessonMaterial)
+        .where(LessonMaterial.lesson_id == lesson.id)
+        .order_by(LessonMaterial.id)
+    ).all()
+    outline = _get_latest_knowledge_outline(db, lesson.id)
+    session_id = request.cookies.get(SESSION_COOKIE_NAME)
+    draft, _used_fallback = await run_in_threadpool(
+        generate_teaching_prep_reference,
+        lesson,
+        materials,
+        outline,
+        get_session_api_key(session_id),
+        get_session_selected_model(session_id) or get_default_deepseek_model(),
+    )
+    _upsert_lesson_drafts(db, lesson, outline, [draft])
+    db.commit()
+    redirect_to = sanitize_next_path(return_to) or f"/lessons/{lesson.id}/drafts"
+    return RedirectResponse(url=redirect_to, status_code=303)
+
+
 @app.post("/lessons/{lesson_id}/drafts/generate/{draft_type}")
 async def generate_tiered_lesson_draft_route(
     lesson_id: int,
@@ -1107,6 +1169,7 @@ async def save_lesson_draft(
     draft_id: int,
     title: str = Form(...),
     content: str = Form(...),
+    return_to: str = Form(""),
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
     """保存教师编辑后的导学草稿。"""
@@ -1119,7 +1182,7 @@ async def save_lesson_draft(
     draft.content = content.strip()
     draft.status = "reviewed"
     db.commit()
-    return RedirectResponse(url=f"/lessons/{lesson_id}/drafts", status_code=303)
+    return RedirectResponse(url=sanitize_next_path(return_to) or f"/lessons/{lesson_id}/drafts", status_code=303)
 
 
 @app.post("/lessons/{lesson_id}/drafts/{draft_id}/export-chaoxing")
@@ -1168,14 +1231,15 @@ async def download_lesson_draft_markdown(
     draft_id: int,
     db: Session = Depends(get_db),
 ) -> Response:
-    """将当前导学案草稿保存并下载为 Markdown。"""
+    """将当前导学案或备课参考建议草稿下载为 Markdown。"""
 
     lesson = db.get(Lesson, lesson_id)
     draft = db.get(LessonDraft, draft_id)
     if lesson is None or draft is None or draft.lesson_id != lesson_id:
         raise HTTPException(status_code=404, detail="导学草稿不存在")
-    if draft.draft_type not in {"guide_low", "guide_mid", "guide_high"}:
-        raise HTTPException(status_code=400, detail="只有导学案草稿可以下载 Markdown")
+    downloadable_types = {"guide_low", "guide_mid", "guide_high", TEACHING_PREP_REFERENCE_DRAFT_TYPE}
+    if draft.draft_type not in downloadable_types:
+        raise HTTPException(status_code=400, detail="只有导学案或备课参考建议草稿可以下载 Markdown")
 
     GUIDE_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
     filename_part = LESSON_DRAFT_DOWNLOAD_NAME_PARTS.get(draft.draft_type, "learning_draft")
