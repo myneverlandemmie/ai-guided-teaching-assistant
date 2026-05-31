@@ -88,9 +88,8 @@
 <section class="card">
   <div class="card">
     <strong>材料支持范围</strong>
-    <p>当前支持直接粘贴文本，也支持上传 .txt、.md、.docx 文件。</p>
-    <p>实验性支持 .pptx 文本提取；Word / PPT 仅提取可读取文本。</p>
-    <p>图片、公式、复杂图表、扫描件无法自动识别；如果提取结果不完整，请复制文字粘贴到文本框中补充。暂不支持旧版 .doc、.ppt、PDF、图片文件。</p>
+    <p>支持 txt / md / docx / pptx / xlsx；xlsx 将提取表格文本，不保留复杂格式。</p>
+    <p>暂不支持 xls、PDF、图片或扫描件；如果提取结果不完整，请复制文字粘贴到文本框中补充。</p>
   </div>
   {% if error_message %}
     <p class="error">{{ error_message }}</p>
@@ -116,7 +115,7 @@
     </p>
     <p id="file-upload-area" style="display:none;">
       <label for="files">选择文件，可一次选择多个</label><br>
-      <input id="files" name="files" type="file" accept=".txt,.md,.docx,.pptx" multiple>
+      <input id="files" name="files" type="file" accept=".txt,.md,.docx,.pptx,.xlsx" multiple>
     </p>
     <button type="submit">添加到本课次</button>
   </form>

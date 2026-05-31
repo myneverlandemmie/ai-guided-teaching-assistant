@@ -872,7 +872,7 @@ async def add_lesson_material(
         return templates.TemplateResponse(
             request,
             "lesson_detail.html",
-            _lesson_material_context(db, lesson, "请选择一个或多个 .txt / .md / .docx / .pptx 文件。"),
+            _lesson_material_context(db, lesson, "请选择一个或多个 .txt / .md / .docx / .pptx / .xlsx 文件；暂不支持 .xls。"),
             status_code=400,
         )
 
@@ -883,8 +883,11 @@ async def add_lesson_material(
     for uploaded_file in uploaded_files:
         safe_filename = Path(uploaded_file.filename or "lesson-material").name
         suffix = Path(safe_filename).suffix.lower()
+        if suffix == ".xls":
+            errors.append(f"{safe_filename}：暂不支持旧版 .xls 表格文件。请另存为 .xlsx 后上传，或复制表格内容粘贴到文本框。")
+            continue
         if suffix not in SUPPORTED_MATERIAL_SUFFIXES:
-            errors.append(f"{safe_filename}：暂不支持该文件类型。请上传 .txt / .md / .docx / .pptx；不支持 PDF、图片、扫描件和旧版 .doc / .ppt。")
+            errors.append(f"{safe_filename}：暂不支持该文件类型。请上传 .txt / .md / .docx / .pptx / .xlsx；不支持 .xls、PDF、图片、扫描件和旧版 .doc / .ppt。")
             continue
 
         saved_path = LESSON_MATERIAL_UPLOAD_DIR / f"{uuid4().hex}-{safe_filename}"

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import re
+from datetime import date, datetime, time
 from pathlib import Path
 
 try:
@@ -23,8 +24,13 @@ try:
 except ImportError:  # pragma: no cover - 缺依赖时由调用方显示错误
     Presentation = None
 
+try:
+    from openpyxl import load_workbook
+except ImportError:  # pragma: no cover - 缺依赖时由调用方显示错误
+    load_workbook = None
 
-SUPPORTED_MATERIAL_SUFFIXES = {".txt", ".md", ".docx", ".pptx"}
+SUPPORTED_MATERIAL_SUFFIXES = {".txt", ".md", ".docx", ".pptx", ".xlsx"}
+MAX_XLSX_EXTRACTED_CHARS = 120_000
 FOOTER_PATTERNS = (
     re.compile(r"©\s*Microsoft Corporation", re.IGNORECASE),
     re.compile(r"All rights reserved", re.IGNORECASE),
@@ -206,6 +212,74 @@ def extract_text_from_pptx(file_path: str | Path) -> str:
     return text
 
 
+def _format_xlsx_cell_value(value: object) -> str:
+    """将 openpyxl 单元格值转换为适合进入教学材料的文本。"""
+
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    if isinstance(value, date):
+        return value.strftime("%Y-%m-%d")
+    if isinstance(value, time):
+        return value.strftime("%H:%M:%S")
+    return str(value).strip()
+
+
+def _limit_xlsx_text(text: str) -> str:
+    """限制大表格提取文本长度，避免单个材料无限增长。"""
+
+    if len(text) <= MAX_XLSX_EXTRACTED_CHARS:
+        return text
+    clipped = text[:MAX_XLSX_EXTRACTED_CHARS].rstrip()
+    return (
+        f"{clipped}\n\n"
+        "提示：该 XLSX 表格资料内容较长，已按长度限制截取；请教师结合原始文件确认。"
+    )
+
+
+def extract_text_from_xlsx(file_path: str | Path) -> str:
+    """从 `.xlsx` 工作簿中提取工作表名和非空行文本。
+
+    Args:
+        file_path: `.xlsx` 文件路径。
+
+    Returns:
+        Markdown 风格的工作表文本。
+
+    Raises:
+        LessonMaterialExtractionError: 缺少依赖、文件无法解析或未提取到文本。
+    """
+
+    if load_workbook is None:
+        raise LessonMaterialExtractionError("缺少 openpyxl 依赖，无法解析 .xlsx。")
+
+    try:
+        workbook = load_workbook(str(file_path), read_only=True, data_only=True)
+    except Exception as exc:  # noqa: BLE001 - 需要转成教师可理解的错误
+        raise LessonMaterialExtractionError(".xlsx 表格文本提取失败，请检查文件是否损坏或复制表格内容粘贴到文本框。") from exc
+
+    sheet_blocks: list[str] = []
+    try:
+        for worksheet in workbook.worksheets:
+            rows: list[str] = []
+            for row in worksheet.iter_rows(values_only=True):
+                cells = [_format_xlsx_cell_value(value) for value in row]
+                non_empty_cells = [cell for cell in cells if cell]
+                if non_empty_cells:
+                    rows.append("\t".join(non_empty_cells))
+            if rows:
+                sheet_blocks.append(f"## Sheet: {worksheet.title}\n\n" + "\n".join(rows))
+    finally:
+        workbook.close()
+
+    if not sheet_blocks:
+        raise LessonMaterialExtractionError("未从 .xlsx 中提取到可用文本，请复制表格内容粘贴到文本框。")
+
+    text = "# XLSX 表格资料提取\n\n" + "\n\n".join(sheet_blocks)
+    return _limit_xlsx_text(clean_extracted_text(text))
+
+
 def extract_text_from_lesson_material(file_path: str | Path, filename: str) -> str:
     """按文件扩展名提取课次材料文本。
 
@@ -222,9 +296,11 @@ def extract_text_from_lesson_material(file_path: str | Path, filename: str) -> s
 
     path = Path(file_path)
     suffix = Path(filename).suffix.lower()
+    if suffix == ".xls":
+        raise LessonMaterialExtractionError("暂不支持旧版 .xls 表格文件。请另存为 .xlsx 后上传，或复制表格内容粘贴到文本框。")
     if suffix not in SUPPORTED_MATERIAL_SUFFIXES:
         raise LessonMaterialExtractionError(
-            "当前支持粘贴文本或上传 .txt / .md / .docx / .pptx 文件；暂不支持 PDF、图片、扫描件和旧版 .doc / .ppt。"
+            "当前支持粘贴文本或上传 .txt / .md / .docx / .pptx / .xlsx 文件；暂不支持 .xls、PDF、图片、扫描件和旧版 .doc / .ppt。"
         )
     if suffix in {".txt", ".md"}:
         return clean_extracted_text(path.read_text(encoding="utf-8", errors="replace"))
@@ -232,4 +308,6 @@ def extract_text_from_lesson_material(file_path: str | Path, filename: str) -> s
         return extract_text_from_docx(path)
     if suffix == ".pptx":
         return extract_text_from_pptx(path)
+    if suffix == ".xlsx":
+        return extract_text_from_xlsx(path)
     raise LessonMaterialExtractionError("不支持的教学材料文件类型。")

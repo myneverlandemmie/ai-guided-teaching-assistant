@@ -186,6 +186,9 @@ async def test_lesson_materials_outline_v2_page_shows_materials_and_forms(tmp_pa
         assert "学时：2" in response.text
         assert "编码：0302" in response.text
         assert "上传课次资料" in response.text
+        assert "txt / md / docx / pptx / xlsx" in response.text
+        assert "xlsx 将提取表格文本" in response.text
+        assert "暂不支持 xls、PDF、图片或扫描件" in response.text
         assert f'action="/lessons/{lesson_id}/materials"' in response.text
         assert f'name="return_to" value="/ui-v2/lessons/{lesson_id}/materials-outline"' in response.text
         assert "资料类别" in response.text
@@ -193,6 +196,7 @@ async def test_lesson_materials_outline_v2_page_shows_materials_and_forms(tmp_pa
         assert "教案" in response.text
         assert "PPT / 课件" in response.text
         assert 'name="files"' in response.text
+        assert 'accept=".txt,.md,.docx,.pptx,.xlsx"' in response.text
         assert "粘贴补充资料" in response.text
         assert 'name="content"' in response.text
         assert "实验步骤" in response.text

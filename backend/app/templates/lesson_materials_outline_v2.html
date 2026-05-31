@@ -85,7 +85,7 @@
     <div class="materials-upload-grid-v2">
       <article class="materials-input-card-v2">
         <h3>上传课次资料</h3>
-        <p>支持 txt / md / docx / pptx，上传后系统提取文本用于知识主干生成。</p>
+        <p>支持 txt / md / docx / pptx / xlsx；xlsx 将提取表格文本，不保留复杂格式。暂不支持 xls、PDF、图片或扫描件。</p>
         <form method="post" action="/lessons/{{ lesson.id }}/materials" enctype="multipart/form-data">
           <input type="hidden" name="return_to" value="{{ v2_return_to }}">
           <input type="hidden" name="input_mode" value="file_upload">
@@ -99,7 +99,7 @@
           <label for="file-title-v2">资料标题</label>
           <input id="file-title-v2" name="title" type="text" placeholder="可不填，系统会自动生成">
           <label for="files-v2">选择文件</label>
-          <input id="files-v2" name="files" type="file" accept=".txt,.md,.docx,.pptx" multiple required>
+          <input id="files-v2" name="files" type="file" accept=".txt,.md,.docx,.pptx,.xlsx" multiple required>
           <button type="submit">上传资料</button>
         </form>
       </article>

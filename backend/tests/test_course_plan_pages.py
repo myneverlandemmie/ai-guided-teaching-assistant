@@ -661,11 +661,10 @@ async def test_lesson_detail_shows_material_support_scope(tmp_path: Path) -> Non
         response = await client.get("/lessons/1")
 
         assert response.status_code == 200
-        assert "当前支持直接粘贴文本" in response.text
         assert "添加到本课次" in response.text
-        assert "上传 .txt、.md、.docx 文件" in response.text
-        assert "实验性支持 .pptx 文本提取" in response.text
-        assert "暂不支持旧版 .doc、.ppt、PDF、图片文件" in response.text
+        assert "txt / md / docx / pptx / xlsx" in response.text
+        assert "xlsx 将提取表格文本" in response.text
+        assert "暂不支持 xls、PDF、图片或扫描件" in response.text
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
@@ -694,7 +693,7 @@ async def test_unsupported_lesson_material_file_type_shows_hint(tmp_path: Path) 
 
         assert response.status_code == 400
         assert "暂不支持该文件类型" in response.text
-        assert "暂不支持旧版 .doc、.ppt、PDF、图片文件" in response.text
+        assert "暂不支持 xls、PDF、图片或扫描件" in response.text
         with session_factory() as session:
             assert session.scalars(select(LessonMaterial)).all() == []
     finally:
