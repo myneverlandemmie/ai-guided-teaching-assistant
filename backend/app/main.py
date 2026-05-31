@@ -284,6 +284,16 @@ def _get_lesson_draft_by_type(db: Session, lesson_id: int, draft_type: str) -> L
     )
 
 
+def _learning_guide_dependency_message(draft_type: str, has_low: bool, has_mid: bool) -> str | None:
+    """返回学生导学案任务包的依赖提示。"""
+
+    if draft_type == "guide_mid" and not has_low:
+        return "请先生成全班通用导学案，再生成巩固提升任务包。"
+    if draft_type == "guide_high" and not has_mid:
+        return "请先生成巩固提升任务包，再生成拓展探究任务包。"
+    return None
+
+
 def _upsert_lesson_drafts(
     db: Session,
     lesson: Lesson,
@@ -885,6 +895,48 @@ async def show_diagnostic_probe_v2(
     )
 
 
+@app.get("/ui-v2/lessons/{lesson_id}/learning-guides", response_class=HTMLResponse)
+async def show_learning_guides_v2(
+    lesson_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    """学生导学案 V2 preview。"""
+
+    lesson = db.scalar(
+        select(Lesson)
+        .options(selectinload(Lesson.course))
+        .where(Lesson.id == lesson_id)
+    )
+    if lesson is None:
+        raise HTTPException(status_code=404, detail="课次不存在")
+
+    guide_drafts = {
+        draft.draft_type: draft
+        for draft in _get_lesson_drafts(db, lesson.id)
+        if draft.draft_type in {"guide_low", "guide_mid", "guide_high"}
+    }
+    fallback_message = (
+        "DeepSeek 响应较慢、调用失败或当前未设置 API Key，已回退为本地结构化草稿。你可以稍后重试，或减少材料后再生成。"
+        if request.query_params.get("draft_fallback") == "1"
+        else None
+    )
+    return templates.TemplateResponse(
+        request,
+        "learning_guides_v2.html",
+        {
+            "lesson": lesson,
+            "outline": _get_latest_knowledge_outline(db, lesson.id),
+            "guide_low": guide_drafts.get("guide_low"),
+            "guide_mid": guide_drafts.get("guide_mid"),
+            "guide_high": guide_drafts.get("guide_high"),
+            "draft_status_labels": LESSON_DRAFT_STATUS_LABELS,
+            "fallback_message": fallback_message,
+            "dependency_message": request.query_params.get("dependency_message") or None,
+        },
+    )
+
+
 def _lesson_material_context(db: Session, lesson: Lesson, error_message: str | None = None) -> dict[str, object]:
     """构造课次材料页面上下文。"""
 
@@ -1280,23 +1332,43 @@ async def generate_tiered_lesson_draft_route(
             status_code=303,
         )
 
-    if draft_type in {"guide_mid", "guide_high"} and db.scalar(
-        select(LessonDraft).where(LessonDraft.lesson_id == lesson.id, LessonDraft.draft_type == "guide_low")
-    ) is None:
+    low_guide = _get_lesson_draft_by_type(db, lesson.id, "guide_low")
+    mid_guide = _get_lesson_draft_by_type(db, lesson.id, "guide_mid")
+    dependency_message = _learning_guide_dependency_message(draft_type, low_guide is not None, mid_guide is not None)
+    if dependency_message:
+        redirect_to = sanitize_next_path(return_to) or f"/lessons/{lesson.id}/drafts"
         return RedirectResponse(
-            url=sanitize_next_path(return_to) or f"/lessons/{lesson.id}/drafts",
+            url=_append_query_param(redirect_to, "dependency_message", dependency_message),
             status_code=303,
         )
 
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
-    draft, used_fallback = await run_in_threadpool(
-        generate_single_lesson_draft_with_ai,
-        lesson,
-        outline,
-        draft_type,
-        get_session_api_key(session_id),
-        get_session_selected_model(session_id) or get_default_deepseek_model(),
-    )
+    related_drafts = {
+        related_type: draft.content
+        for related_type, draft in {"guide_low": low_guide, "guide_mid": mid_guide}.items()
+        if draft is not None
+    }
+    api_key = get_session_api_key(session_id)
+    selected_model = get_session_selected_model(session_id) or get_default_deepseek_model()
+    if api_key:
+        draft, used_fallback = await run_in_threadpool(
+            generate_single_lesson_draft_with_ai,
+            lesson,
+            outline,
+            draft_type,
+            api_key,
+            selected_model,
+            related_drafts,
+        )
+    else:
+        draft, used_fallback = generate_single_lesson_draft_with_ai(
+            lesson,
+            outline,
+            draft_type,
+            None,
+            selected_model,
+            related_drafts,
+        )
     _upsert_lesson_drafts(db, lesson, outline, [draft])
     db.commit()
     redirect_to = sanitize_next_path(return_to) or f"/lessons/{lesson.id}/drafts"

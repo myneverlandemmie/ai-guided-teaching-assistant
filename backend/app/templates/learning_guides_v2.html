@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}学生导学案{% endblock %}
+{% block top_nav %}{% endblock %}
+{% block content %}
+<div class="ui-v2-shell learning-guides-v2">
+  {% set v2_return_to = "/ui-v2/lessons/" ~ lesson.id ~ "/learning-guides" %}
+  <nav class="v2-topbar" aria-label="V2 产品导航">
+    <a class="v2-brand" href="/ui-v2/courses">
+      <span class="v2-brand-mark" aria-hidden="true"></span>
+      <span>智学导评 V0.2</span>
+    </a>
+    <div class="v2-breadcrumb">
+      <span>课程中心</span>
+      <span class="v2-breadcrumb-separator">|</span>
+      <span>正式课次</span>
+      <span class="v2-breadcrumb-separator">|</span>
+      <span>学生导学案</span>
+    </div>
+    <a class="v2-topbar-link" href="/ai/settings">AI 设置</a>
+  </nav>
+
+  <section class="learning-hero-v2">
+    <div class="learning-hero-copy-v2">
+      <span class="eyebrow-v2">学习单与任务包</span>
+      <h1>学生导学案</h1>
+      <p>基于知识主干与课前学情测试生成学生学习单和可选任务包，供教师审阅、修改与下载。</p>
+      <div class="lesson-pills-v2" aria-label="课次信息">
+        <span>课程：{{ lesson.course.title if lesson.course else "未设置" }}</span>
+        <span>课题：{{ lesson.title }}</span>
+        <span>周次：{{ lesson.week }}</span>
+        <span>课次：{{ lesson.lesson_no }}</span>
+        <span>学时：{{ lesson.hours }}</span>
+        <span>编码：{{ lesson.lesson_code or "未设置" }}</span>
+      </div>
+    </div>
+    <div class="v2-hero-actions learning-hero-actions-v2">
+      <a class="button-link" href="/ui-v2/courses">返回课程中心</a>
+      <a class="button-link button-ghost" href="/courses/{{ lesson.course_id }}/lessons">返回正式课次列表</a>
+    </div>
+  </section>
+
+  <section class="materials-flow-v2" aria-label="AI 导学流程">
+    <article class="flow-step-v2">
+      <span>1</span>
+      <strong>选择课程</strong>
+      <p>进入课程备课工作区。</p>
+    </article>
+    <article class="flow-step-v2">
+      <span>2</span>
+      <strong>课程资料整理</strong>
+      <p>整理资料，形成知识主干与备课参考。</p>
+    </article>
+    <article class="flow-step-v2">
+      <span>3</span>
+      <strong>课前学情测试</strong>
+      <p>了解学生课前基础。</p>
+    </article>
+    <article class="flow-step-v2 is-current">
+      <span>4</span>
+      <strong>学生导学案</strong>
+      <p>形成学生学习单与任务包。</p>
+    </article>
+  </section>
+
+  <section class="learning-stage-nav-v2 materials-next-v2" aria-label="前后阶段">
+    <div>
+      <span class="eyebrow-v2">前后阶段</span>
+      <p>完成课前学情测试后，可在本页整理学生学习单与任务包；如需调整资料或前测，可返回相应阶段继续修改。</p>
+    </div>
+    <div class="materials-next-actions-v2">
+      <a class="v2-action-button v2-action-button--secondary" href="/ui-v2/lessons/{{ lesson.id }}/materials-outline">进入课程资料整理</a>
+      <a class="v2-action-button v2-action-button--secondary" href="/ui-v2/lessons/{{ lesson.id }}/diagnostic-probe">进入课前学情测试</a>
+    </div>
+  </section>
+
+  {% if fallback_message %}
+    <p class="alert">{{ fallback_message }}</p>
+  {% endif %}
+  {% if dependency_message %}
+    <p class="alert">{{ dependency_message }}</p>
+  {% endif %}
+
+  <section class="learning-boundary-v2">
+    <p class="course-note-v2">AI 输出仅供教师审阅、修改与确认，不会自动发布给学生。全班通用导学案是主文档，巩固提升与拓展探究任务包为可选补充。</p>
+  </section>
+
+  <section class="learning-workspace-v2" aria-label="学生导学案生成工作台">
+    <div class="learning-main-card-v2">
+      <span class="card-badge">主文档</span>
+      <h2>全班通用导学案</h2>
+      <p>也可称为基础版导学案，面向全班使用。建议优先生成、审阅并作为课堂学习单使用。</p>
+      {% if outline %}
+        {% if guide_low %}
+          <p class="draft-existing-note">已有草稿，可在下方编辑区查看。</p>
+        {% endif %}
+        <p id="learning-core-status" class="generation-status" role="status" aria-live="polite"></p>
+        <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_low" data-ai-generation-form data-status-target="learning-core-status" data-loading-label="AI 正在生成，请稍候..." data-loading-message="AI 正在生成全班通用导学案，请稍候……生成内容为草稿，需教师审阅、修改与确认。" onsubmit="return handleAiGenerationSubmit(event, this);">
+          <input type="hidden" name="return_to" value="{{ v2_return_to }}">
+          <button class="v2-action-button v2-action-button--primary" type="submit" data-ai-generation-button>{% if guide_low %}重新生成全班通用导学案{% else %}生成全班通用导学案{% endif %}</button>
+        </form>
+      {% else %}
+        <p class="empty-v2">当前课次还没有知识主干。请先完成课程资料整理，再生成学生导学案。</p>
+      {% endif %}
+    </div>
+
+    <aside class="learning-task-pack-list-v2" aria-label="可选任务包">
+      <p class="task-pack-model-note-v2 course-note-v2">任务包生成内容较长，建议在 AI 设置中选择 deepseek-v4-pro 以获得更稳定的生成效果；使用 flash 模型时可能因响应较慢回退为本地结构化草稿。</p>
+      <article class="learning-task-pack-card-v2">
+        <span class="card-badge">可选补充</span>
+        <h3>巩固提升任务包</h3>
+        <p>面向完成基础任务的学生，用于巩固与提升。</p>
+        {% if guide_mid %}
+          <p class="draft-existing-note">已有草稿，可在下方编辑区查看。</p>
+        {% endif %}
+        {% if not guide_low %}
+          <p class="empty-v2">请先生成全班通用导学案，再生成巩固提升任务包。巩固任务应围绕主导学案内容进行适度提升。</p>
+        {% endif %}
+        <p id="learning-enhancement-status" class="generation-status" role="status" aria-live="polite"></p>
+        {% if outline %}
+          <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_mid" data-ai-generation-form data-status-target="learning-enhancement-status" data-loading-label="AI 正在生成，请稍候..." data-loading-message="AI 正在生成巩固提升任务包，请稍候……生成内容为可选补充，需教师审阅、修改与确认。" onsubmit="return handleAiGenerationSubmit(event, this);">
+            <input type="hidden" name="return_to" value="{{ v2_return_to }}">
+            <button class="v2-action-button v2-action-button--secondary" type="submit" data-ai-generation-button {% if not guide_low %}disabled title="请先生成全班通用导学案"{% endif %}>生成巩固提升任务包</button>
+          </form>
+        {% endif %}
+      </article>
+
+      <article class="learning-task-pack-card-v2">
+        <span class="card-badge">可选挑战</span>
+        <h3>拓展探究任务包</h3>
+        <p>面向兴趣小组或学有余力学生，用于拓展应用和综合探究。</p>
+        {% if guide_high %}
+          <p class="draft-existing-note">已有草稿，可在下方编辑区查看。</p>
+        {% endif %}
+        {% if not guide_mid %}
+          <p class="empty-v2">请先生成巩固提升任务包，再生成拓展探究任务包。拓展内容应在巩固任务基础上进一步提升。</p>
+        {% endif %}
+        <p id="learning-extension-status" class="generation-status" role="status" aria-live="polite"></p>
+        {% if outline %}
+          <form method="post" action="/lessons/{{ lesson.id }}/drafts/generate/guide_high" data-ai-generation-form data-status-target="learning-extension-status" data-loading-label="AI 正在生成，请稍候..." data-loading-message="AI 正在生成拓展探究任务包，请稍候……生成内容为可选挑战，需教师审阅、修改与确认。" onsubmit="return handleAiGenerationSubmit(event, this);">
+            <input type="hidden" name="return_to" value="{{ v2_return_to }}">
+            <button class="v2-action-button v2-action-button--secondary" type="submit" data-ai-generation-button {% if not guide_mid %}disabled title="请先生成巩固提升任务包"{% endif %}>生成拓展探究任务包</button>
+          </form>
+        {% endif %}
+      </article>
+    </aside>
+  </section>
+
+  <section class="learning-editor-v2">
+    <div class="section-head-v2">
+      <div>
+        <span class="eyebrow-v2">草稿编辑</span>
+        <h2>查看、修改与下载</h2>
+      </div>
+      <p>默认显示全班通用导学案。任务包生成后可切换查看、编辑或下载 Markdown。</p>
+    </div>
+
+    {% if guide_low or guide_mid or guide_high %}
+      <div class="editor-tabs learning-tabs-v2" role="tablist" aria-label="学生导学案草稿">
+        {% if guide_low %}
+          <button type="button" class="editor-tab is-active" data-draft-tab-target="learning-panel-core" role="tab" aria-selected="true">全班通用导学案</button>
+        {% endif %}
+        {% if guide_mid %}
+          <button type="button" class="editor-tab {% if not guide_low %}is-active{% endif %}" data-draft-tab-target="learning-panel-enhancement" role="tab" aria-selected="{{ 'false' if guide_low else 'true' }}">巩固提升任务包</button>
+        {% endif %}
+        {% if guide_high %}
+          <button type="button" class="editor-tab {% if not guide_low and not guide_mid %}is-active{% endif %}" data-draft-tab-target="learning-panel-extension" role="tab" aria-selected="{{ 'false' if guide_low or guide_mid else 'true' }}">拓展探究任务包</button>
+        {% endif %}
+      </div>
+
+      {% set guide_panels = [
+        (guide_low, "learning-panel-core", "全班通用导学案", "主文档"),
+        (guide_mid, "learning-panel-enhancement", "巩固提升任务包", "可选补充"),
+        (guide_high, "learning-panel-extension", "拓展探究任务包", "可选挑战"),
+      ] %}
+      {% for draft, panel_id, label, badge in guide_panels %}
+        {% if draft %}
+          <section id="{{ panel_id }}" class="editor-panel {% if (draft == guide_low) or (not guide_low and draft == guide_mid) or (not guide_low and not guide_mid and draft == guide_high) %}is-active{% endif %}" data-draft-editor-panel role="tabpanel">
+            <article class="learning-editor-card-v2">
+              <div class="editor-head">
+                <div>
+                  <span class="card-badge">{{ badge }}</span>
+                  <h3 class="editor-title">{{ label }}</h3>
+                  <p class="editor-meta">
+                    状态：{{ draft_status_labels.get(draft.status, draft.status) }} ｜ 生成方式：{% if draft.generated_by in ["rule_based", "local-structured-draft"] %}本地结构化草稿{% else %}AI 生成草稿（{{ draft.generated_by }}）{% endif %}
+                  </p>
+                </div>
+                <a class="v2-action-button v2-action-button--secondary" href="/lessons/{{ lesson.id }}/drafts/{{ draft.id }}/download-md">下载 Markdown</a>
+              </div>
+              <form class="editor-area" method="post" action="/lessons/{{ lesson.id }}/drafts/{{ draft.id }}/save">
+                <input type="hidden" name="return_to" value="{{ v2_return_to }}">
+                <div class="editor-field">
+                  <label for="learning-title-{{ draft.id }}">标题</label>
+                  <input id="learning-title-{{ draft.id }}" name="title" type="text" value="{{ draft.title }}">
+                </div>
+                <div class="editor-field">
+                  <label for="learning-content-{{ draft.id }}">草稿内容</label>
+                  <textarea class="editor-textarea" id="learning-content-{{ draft.id }}" name="content" rows="18">{{ draft.content }}</textarea>
+                </div>
+                <button class="v2-action-button v2-action-button--primary" type="submit">保存教师修改</button>
+              </form>
+            </article>
+          </section>
+        {% endif %}
+      {% endfor %}
+    {% else %}
+      <div class="empty-v2">
+        <p>当前还没有学生导学案草稿。请先生成全班通用导学案。</p>
+      </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

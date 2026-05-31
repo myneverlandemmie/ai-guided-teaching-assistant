@@ -16,7 +16,16 @@ from app.services.ai.lesson_draft_service import (
     generate_single_lesson_draft,
     generate_tiered_guide_draft,
 )
-from app.services.ai.sanitizer import sanitize_text_for_outline
+from app.services.ai.sanitizer import (
+    API_KEY_PATTERN,
+    CLASS_NAME_PATTERN,
+    ID_CARD_PATTERN,
+    PASSWORD_INLINE_PATTERN,
+    PHONE_PATTERN,
+    TEACHER_NAME_PATTERN,
+    TOKEN_PATTERN,
+    sanitize_text_for_outline,
+)
 
 LOCAL_STRUCTURED_DRAFT = "local-structured-draft"
 
@@ -62,12 +71,37 @@ def _is_usable_draft_content(draft_type: str, content: str) -> bool:
     return all(heading in content for heading in required_headings)
 
 
+def _sanitize_generated_draft_content(draft_type: str, content: str) -> str:
+    """清洗 AI 输出，避免课前题目中的通用教学字段被行政信息规则误伤。"""
+
+    if draft_type != "diagnostic_probe":
+        return sanitize_text_for_outline(content)
+
+    sanitized_lines: list[str] = []
+    for raw_line in (content or "").splitlines():
+        line = raw_line.rstrip()
+        if not line.strip():
+            sanitized_lines.append("")
+            continue
+        line = API_KEY_PATTERN.sub("[疑似密钥已移除]", line)
+        line = TOKEN_PATTERN.sub("[疑似 Token 已移除]", line)
+        line = PASSWORD_INLINE_PATTERN.sub("[密码信息已移除]", line)
+        line = PHONE_PATTERN.sub("[已过滤手机号]", line)
+        line = ID_CARD_PATTERN.sub("[已过滤身份证号]", line)
+        line = CLASS_NAME_PATTERN.sub("某班级", line)
+        line = TEACHER_NAME_PATTERN.sub("某教师", line)
+        line = line.replace("[已过滤行政信息]", "示例字段")
+        sanitized_lines.append(line)
+    return "\n".join(sanitized_lines).strip()
+
+
 def _call_deepseek_lesson_draft(
     lesson: Lesson,
     outline: KnowledgeOutline,
     draft_type: str,
     api_key: str,
     selected_model: str | None,
+    related_drafts: dict[str, str] | None = None,
 ) -> tuple[str, str]:
     """调用 DeepSeek 生成单份导学草稿。
 
@@ -75,7 +109,7 @@ def _call_deepseek_lesson_draft(
     """
 
     config = get_deepseek_config(selected_model)
-    prompt = build_lesson_draft_prompt(lesson, outline, draft_type)
+    prompt = build_lesson_draft_prompt(lesson, outline, draft_type, related_drafts=related_drafts)
     payload = {
         "model": config.model,
         "messages": [
@@ -102,7 +136,7 @@ def _call_deepseek_lesson_draft(
         raise DeepSeekProviderError("DeepSeek 返回格式异常，已回退为本地结构化草稿。") from None
     if not content:
         raise DeepSeekProviderError("DeepSeek 返回内容为空，已回退为本地结构化草稿。")
-    return sanitize_text_for_outline(content), config.model
+    return _sanitize_generated_draft_content(draft_type, content), config.model
 
 
 def generate_basic_lesson_drafts_with_ai(
@@ -168,6 +202,7 @@ def generate_single_lesson_draft_with_ai(
     draft_type: str,
     api_key: str | None,
     selected_model: str | None,
+    related_drafts: dict[str, str] | None = None,
 ) -> tuple[GeneratedLessonDraft, bool]:
     """只生成指定 draft_type；AI 失败时也只 fallback 当前草稿。"""
 
@@ -175,7 +210,17 @@ def generate_single_lesson_draft_with_ai(
     if not api_key:
         return local_draft, True
     try:
-        content, model_name = _call_deepseek_lesson_draft(lesson, outline, draft_type, api_key, selected_model)
+        if related_drafts:
+            content, model_name = _call_deepseek_lesson_draft(
+                lesson,
+                outline,
+                draft_type,
+                api_key,
+                selected_model,
+                related_drafts=related_drafts,
+            )
+        else:
+            content, model_name = _call_deepseek_lesson_draft(lesson, outline, draft_type, api_key, selected_model)
     except DeepSeekProviderError:
         return local_draft, True
     if not _is_usable_draft_content(draft_type, content):

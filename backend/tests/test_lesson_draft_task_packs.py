@@ -2,6 +2,7 @@ from pathlib import Path
 
 from app.models.knowledge_outline import KnowledgeOutline
 from app.models.lesson import Lesson
+from app.services.ai.lesson_draft_ai_service import _sanitize_generated_draft_content
 from app.services.ai.lesson_draft_prompt import LESSON_DRAFT_SYSTEM_MESSAGE, build_lesson_draft_prompt
 from app.services.ai.lesson_draft_service import DRAFT_TYPE_LABELS, generate_basic_lesson_drafts, generate_tiered_guide_draft
 
@@ -65,6 +66,7 @@ def test_lesson_draft_prompts_prevent_dialogue_opening_and_split_task_packs() ->
     lesson = _lesson()
     outline = _outline()
     system_and_low = f"{LESSON_DRAFT_SYSTEM_MESSAGE}\n{build_lesson_draft_prompt(lesson, outline, 'guide_low')}"
+    diagnostic_prompt = build_lesson_draft_prompt(lesson, outline, "diagnostic_probe")
     mid_prompt = build_lesson_draft_prompt(lesson, outline, "guide_mid")
     high_prompt = build_lesson_draft_prompt(lesson, outline, "guide_high")
 
@@ -73,12 +75,66 @@ def test_lesson_draft_prompts_prevent_dialogue_opening_and_split_task_packs() ->
     assert "直接输出正文" in system_and_low
     assert "学习情境" in system_and_low
     assert "任务导入" not in system_and_low
+    assert "不要输出“[已过滤行政信息]”" in diagnostic_prompt
+    assert "SQL 示例必须完整可读" in diagnostic_prompt
+    for teaching_field in ["students", "scores", "学号", "姓名", "成绩"]:
+        assert teaching_field in diagnostic_prompt
     assert "提升任务包" in mid_prompt
     assert "只生成 3—5 个提升任务" in mid_prompt
     assert "不要重复完整导学案结构" in mid_prompt
+    assert "建立在全班通用导学案基础上" in mid_prompt
     assert "拓展挑战包" in high_prompt
     assert "只生成 2—3 个挑战任务" in high_prompt
     assert "不要重复完整导学案结构" in high_prompt
+    assert "高于巩固提升任务包" in high_prompt
+
+
+def test_task_pack_prompts_can_include_existing_guide_context() -> None:
+    lesson = _lesson()
+    outline = _outline()
+    mid_prompt = build_lesson_draft_prompt(
+        lesson,
+        outline,
+        "guide_mid",
+        related_drafts={"guide_low": "# 全班通用导学案\n\n基础任务：完成分组查询。"},
+    )
+    high_prompt = build_lesson_draft_prompt(
+        lesson,
+        outline,
+        "guide_high",
+        related_drafts={
+            "guide_low": "# 全班通用导学案\n\n基础任务：完成分组查询。",
+            "guide_mid": "# 巩固提升任务包\n\n任务：分析常见错误。",
+        },
+    )
+
+    assert "已生成的全班通用导学案" in mid_prompt
+    assert "基础任务：完成分组查询" in mid_prompt
+    assert "已生成的全班通用导学案" in high_prompt
+    assert "已生成的巩固提升任务包" in high_prompt
+    assert "任务：分析常见错误" in high_prompt
+
+
+def test_diagnostic_probe_output_sanitizer_preserves_sql_teaching_fields() -> None:
+    content = """# 课前学情测试草稿
+
+### 题目 1
+- 题型：单选题
+- 题干：在 students 表中，字段 student_id、name、score 分别表示学号、姓名、成绩，查询 scores 表时应使用 SELECT。
+- 选项：A. SELECT name FROM students WHERE score > 80；B. 删除姓名字段；C. 使用真实手机号 13812345678；D. [已过滤行政信息]
+- 参考答案：A
+- 简短解析：students / scores 是通用教学示例表。
+- 诊断点：SQL 字段理解
+- 难度：基础
+"""
+
+    sanitized = _sanitize_generated_draft_content("diagnostic_probe", content)
+
+    for expected in ["students", "scores", "student_id", "name", "score", "学号", "姓名", "成绩", "SELECT", "WHERE"]:
+        assert expected in sanitized
+    assert "13812345678" not in sanitized
+    assert "[已过滤手机号]" in sanitized
+    assert "[已过滤行政信息]" not in sanitized
 
 
 def test_lesson_drafts_template_contains_generation_guard() -> None:

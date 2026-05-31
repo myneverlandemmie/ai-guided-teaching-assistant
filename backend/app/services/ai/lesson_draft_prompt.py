@@ -123,7 +123,36 @@ def _outline_text(outline: KnowledgeOutline, draft_type: str) -> str:
     return trim_text_to_budget(text, min(per_file_budget, total_budget), material_kind)
 
 
-def build_lesson_draft_prompt(lesson: Lesson, outline: KnowledgeOutline, draft_type: str) -> str:
+def _related_draft_context(related_drafts: dict[str, str] | None, draft_type: str) -> str:
+    """构造任务包生成时可见的已有导学草稿上下文。"""
+
+    if not related_drafts:
+        return ""
+
+    if draft_type == "guide_mid" and related_drafts.get("guide_low"):
+        low = trim_text_to_budget(related_drafts["guide_low"], 12_000)
+        return f"""
+已生成的全班通用导学案：
+{low}
+""".strip()
+
+    if draft_type == "guide_high":
+        sections: list[str] = []
+        if related_drafts.get("guide_low"):
+            sections.append(f"已生成的全班通用导学案：\n{trim_text_to_budget(related_drafts['guide_low'], 10_000)}")
+        if related_drafts.get("guide_mid"):
+            sections.append(f"已生成的巩固提升任务包：\n{trim_text_to_budget(related_drafts['guide_mid'], 10_000)}")
+        return "\n\n".join(sections)
+
+    return ""
+
+
+def build_lesson_draft_prompt(
+    lesson: Lesson,
+    outline: KnowledgeOutline,
+    draft_type: str,
+    related_drafts: dict[str, str] | None = None,
+) -> str:
     """构造课前学情测试或学生导学案 prompt。
 
     Args:
@@ -179,6 +208,8 @@ def build_lesson_draft_prompt(lesson: Lesson, outline: KnowledgeOutline, draft_t
 7. 最后给出“导学案复杂度建议”，使用“基础版主文档建议 / 提升任务包建议 / 拓展挑战包建议”；
 8. 明确写出“本前测用于判断学习起点，不作为正式考试成绩”。
 9. 直接从标题正文开始，不要写“当然可以”“以下是”等对话式开头。
+10. 题目可使用虚构表和字段，SQL 示例必须完整可读；可使用 students、scores、student_id、name、score、class、course、学号、姓名、成绩等通用教学字段。
+11. 不要输出“[已过滤行政信息]”；如需避免真实信息，应改用虚构示例，而不是插入过滤占位符。
 """.strip()
 
     guide_labels = {
@@ -190,15 +221,21 @@ def build_lesson_draft_prompt(lesson: Lesson, outline: KnowledgeOutline, draft_t
         raise ValueError("不支持的导学草稿类型")
 
     label, version_focus = guide_labels[draft_type]
+    related_context = _related_draft_context(related_drafts, draft_type)
+    related_context_block = f"\n\n已有导学草稿上下文：\n{related_context}" if related_context else ""
+
     if draft_type == "guide_mid":
         return f"""
 {common_context}
+{related_context_block}
 
 请生成“提升任务包草稿”。它不是完整导学案，只作为基础版主文档之后的可选任务包。
 
 要求：
 - 直接输出正文，不要写“当然可以”“以下是”“好的”“我将为你”等对话式开头；
 - 只生成 3—5 个提升任务，不要重复完整导学案结构；
+- 巩固提升任务包应建立在全班通用导学案基础上，围绕主导学案中的知识点、技能步骤、易错点和课堂任务进行适度提升；
+- 任务应以巩固、变式练习、常见错误纠正和能力提升为主，不应直接设计成最高难度拓展挑战；
 - 适合已完成基础任务的学生；
 - 不暗示学生端提交或自动评分已上线；
 - 不做自动评分；
@@ -244,12 +281,16 @@ def build_lesson_draft_prompt(lesson: Lesson, outline: KnowledgeOutline, draft_t
     if draft_type == "guide_high":
         return f"""
 {common_context}
+{related_context_block}
 
 请生成“拓展挑战包草稿”。它不是完整导学案，只作为基础版主文档之后的可选挑战。
 
 要求：
 - 直接输出正文，不要写“当然可以”“以下是”“好的”“我将为你”等对话式开头；
 - 只生成 2—3 个挑战任务，不要重复完整导学案结构；
+- 拓展探究任务包应建立在全班通用导学案和巩固提升任务包基础上，避免重复基础训练；
+- 任务应体现更高层次的综合应用、情境迁移、开放探究或小组项目任务；
+- 难度应高于巩固提升任务包，但仍需可由教师筛选、改写后用于课堂；
 - 适合兴趣小组、竞赛苗子或学有余力学生；
 - 不暗示学生端提交或自动评分已上线。
 - 不做自动评分；

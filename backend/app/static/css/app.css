@@ -1556,16 +1556,16 @@ input[type="file"] { margin: .75rem 0; }
   font-size: .9rem;
 }
 
-.diagnostic-boundary-v2 {
+.v2-warm-notice {
   background: var(--ui-v2-warm);
   border-color: #f4dfb7;
   box-shadow: none;
 }
 
-.diagnostic-boundary-v2 p {
-  margin: 0;
-  color: #7a4a12;
+.v2-warm-notice p {
+  color: #735c2d;
   line-height: 1.65;
+  margin: 0;
 }
 
 .diagnostic-stats-grid-v2 {
@@ -1753,6 +1753,149 @@ input[type="file"] { margin: .75rem 0; }
   line-height: 1.65;
 }
 
+/* Student learning guides V2 preview. */
+.learning-guides-v2 {
+  --learning-card: #ffffff;
+}
+
+.learning-hero-v2,
+.learning-workspace-v2,
+.learning-boundary-v2,
+.learning-editor-v2 {
+  background: var(--learning-card);
+  border: 1px solid var(--ui-v2-border);
+  border-radius: 24px;
+  box-shadow: var(--ui-v2-shadow);
+  margin-top: 18px;
+  padding: 28px;
+}
+
+.learning-hero-v2 {
+  align-items: flex-start;
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+}
+
+.learning-hero-copy-v2 h1 {
+  color: var(--ui-v2-text);
+  font-size: clamp(2rem, 3vw, 2.65rem);
+  line-height: 1.08;
+  margin: 8px 0;
+}
+
+.learning-hero-copy-v2 p {
+  color: var(--ui-v2-muted);
+  line-height: 1.65;
+  margin: 0;
+  max-width: 760px;
+}
+
+.learning-hero-actions-v2 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+  min-width: 260px;
+}
+
+.learning-workspace-v2 {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, .85fr);
+}
+
+.learning-main-card-v2,
+.learning-task-pack-card-v2,
+.learning-editor-card-v2 {
+  background: #fff;
+  border: 1px solid var(--ui-v2-border);
+  border-radius: 20px;
+  padding: 22px;
+}
+
+.learning-main-card-v2 {
+  background: linear-gradient(135deg, #ffffff 0%, #f0faf6 100%);
+  border-color: rgba(0, 124, 120, .18);
+  min-height: 260px;
+}
+
+.learning-main-card-v2 h2,
+.learning-task-pack-card-v2 h3,
+.learning-editor-card-v2 h3 {
+  color: var(--ui-v2-text);
+  margin: 8px 0;
+}
+
+.learning-main-card-v2 p,
+.learning-task-pack-card-v2 p {
+  color: var(--ui-v2-muted);
+  line-height: 1.62;
+}
+
+.learning-main-card-v2 form,
+.learning-task-pack-card-v2 form {
+  margin-top: 14px;
+}
+
+.learning-guides-v2 .generation-status {
+  display: none;
+  border-radius: 12px;
+  padding: .58rem .68rem;
+  line-height: 1.55;
+  background: #edf6ff;
+  border: 1px solid #cbdff5;
+  color: #1e4775;
+  font-size: .9rem;
+}
+
+.learning-task-pack-list-v2 {
+  display: grid;
+  gap: 14px;
+}
+
+.task-pack-model-note-v2 {
+  display: flex;
+  font-size: .9rem;
+  margin: 0;
+}
+
+.ui-v2-shell .v2-warm-notice {
+  background: var(--ui-v2-warm);
+  border: 1px solid #f3d9a4;
+  border-radius: 18px;
+  box-shadow: none;
+  color: #735c2d;
+  line-height: 1.7;
+  padding: 16px 20px;
+}
+
+.ui-v2-shell .v2-warm-notice p {
+  color: inherit;
+  line-height: inherit;
+  margin: 0;
+}
+
+.learning-task-pack-card-v2 {
+  box-shadow: 0 10px 26px rgba(16, 42, 42, .05);
+}
+
+.learning-tabs-v2 {
+  margin: 4px 0 14px;
+}
+
+.learning-editor-v2 .editor-panel {
+  display: none;
+}
+
+.learning-editor-v2 .editor-panel.is-active {
+  display: block;
+}
+
+.learning-editor-card-v2 textarea.editor-textarea {
+  min-height: 380px;
+}
+
 @media (max-width: 900px) {
   .diagnostic-hero-v2,
   .diagnostic-generate-panel-v2 {
@@ -1769,5 +1912,13 @@ input[type="file"] { margin: .75rem 0; }
   }
   .stat-row-v2 {
     grid-template-columns: 5rem minmax(0, 1fr) 3rem 4rem;
+  }
+  .learning-hero-v2,
+  .learning-workspace-v2 {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .learning-hero-actions-v2 {
+    justify-content: flex-start;
   }
 }

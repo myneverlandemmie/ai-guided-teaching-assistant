@@ -119,6 +119,10 @@ async def test_diagnostic_probe_v2_page_renders_cards_stats_and_actions(tmp_path
         assert "正式课次" in text
         assert "课前学情测试" in text
         assert "不作为正式考试成绩" in text
+        assert "本页用于了解学生课前基础" in text
+        assert "不统计学生成绩" in text
+        assert "导出习题文件后自行使用" in text
+        assert 'class="course-note-v2"' in text
         assert "选择课程" in text
         assert "课程资料整理" in text
         assert "整理资料，形成知识主干与备课参考" in text
@@ -128,7 +132,7 @@ async def test_diagnostic_probe_v2_page_renders_cards_stats_and_actions(tmp_path
         assert "进入学生导学案" in text
         assert '<a class="flow-step-v2"' not in text
         assert f"/ui-v2/lessons/{lesson_id}/materials-outline" in text
-        assert f"/lessons/{lesson_id}/drafts" in text
+        assert f"/ui-v2/lessons/{lesson_id}/learning-guides" in text
         assert f'action="/lessons/{lesson_id}/drafts/generate/diagnostic_probe"' in text
         assert 'name="return_to" value="/ui-v2/lessons/' in text
         assert "data-ai-generation-form" in text

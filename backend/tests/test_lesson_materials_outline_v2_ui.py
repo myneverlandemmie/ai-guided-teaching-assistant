@@ -219,6 +219,7 @@ async def test_lesson_materials_outline_v2_page_shows_materials_and_forms(tmp_pa
         assert "返回正式课次列表" in response.text
         assert "进入课前学情测试" in response.text
         assert "进入学生导学案" in response.text
+        assert f"/ui-v2/lessons/{lesson_id}/learning-guides" in response.text
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
