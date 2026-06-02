@@ -19,13 +19,13 @@ from starlette.concurrency import run_in_threadpool
 
 from app.db.base import create_database_tables
 from app.db.session import engine, get_db
-from app.models.course import Course
 from app.models.knowledge_outline import KnowledgeOutline
 from app.models.lesson import Lesson, LessonMaterial
 from app.models.lesson_draft import LESSON_DRAFT_TYPES, LessonDraft
 from app.routes.ai_settings import create_ai_settings_router
 from app.routes.course_plans import create_course_plans_router
 from app.routes.courses import create_courses_router
+from app.routes.lessons import create_lessons_router
 from app.services.ai import provider as ai_provider
 from app.services.ai.deepseek_client import DeepSeekProviderError
 from app.services.ai.deepseek_client import get_default_deepseek_model
@@ -356,76 +356,15 @@ def _diagnostic_probe_view_context(draft: LessonDraft | None) -> dict[str, objec
 app.include_router(create_ai_settings_router(templates, sanitize_next_path, require_same_origin))
 app.include_router(create_courses_router(templates, sanitize_next_path))
 app.include_router(create_course_plans_router(templates, sanitize_next_path, lambda: COURSE_PLAN_UPLOAD_DIR))
-
-
-@app.get("/courses/{course_id}/lessons", response_class=HTMLResponse)
-async def list_lessons(
-    course_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-) -> HTMLResponse:
-    """显示课程正式课次列表。"""
-
-    course = db.get(Course, course_id)
-    if course is None:
-        raise HTTPException(status_code=404, detail="课程不存在")
-
-    lessons = db.scalars(
-        select(Lesson)
-        .options(selectinload(Lesson.planned_lesson))
-        .where(Lesson.course_id == course.id)
-        .order_by(Lesson.id)
-    ).all()
-    show_notes_column = any((lesson.planned_lesson and lesson.planned_lesson.notes.strip()) for lesson in lessons)
-
-    return templates.TemplateResponse(
-        request,
-        "lessons.html",
-        {
-            "course": course,
-            "lessons": lessons,
-            "lesson_count": len(lessons),
-            "show_notes_column": show_notes_column,
-        },
+app.include_router(
+    create_lessons_router(
+        templates,
+        _get_latest_knowledge_outline,
+        MATERIAL_TYPE_LABELS,
+        LESSON_STATUS_LABELS,
+        KNOWLEDGE_OUTLINE_STATUS_LABELS,
     )
-
-
-@app.get("/lessons/{lesson_id}", response_class=HTMLResponse)
-async def show_lesson_detail(
-    lesson_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-) -> HTMLResponse:
-    """显示正式课次详情和已添加教学材料。"""
-
-    lesson = db.scalar(
-        select(Lesson)
-        .options(selectinload(Lesson.materials))
-        .where(Lesson.id == lesson_id)
-    )
-    if lesson is None:
-        raise HTTPException(status_code=404, detail="课次不存在")
-
-    materials = db.scalars(
-        select(LessonMaterial)
-        .where(LessonMaterial.lesson_id == lesson.id)
-        .order_by(LessonMaterial.id.desc())
-    ).all()
-    knowledge_outline = _get_latest_knowledge_outline(db, lesson.id)
-
-    return templates.TemplateResponse(
-        request,
-        "lesson_detail.html",
-        {
-            "lesson": lesson,
-            "materials": materials,
-            "error_message": None,
-            "material_type_labels": MATERIAL_TYPE_LABELS,
-            "lesson_status_labels": LESSON_STATUS_LABELS,
-            "knowledge_outline": knowledge_outline,
-            "knowledge_outline_status_labels": KNOWLEDGE_OUTLINE_STATUS_LABELS,
-        },
-    )
+)
 
 
 @app.get("/ui-v2/lessons/{lesson_id}/materials-outline", response_class=HTMLResponse)
