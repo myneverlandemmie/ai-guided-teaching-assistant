@@ -8,11 +8,11 @@ from pathlib import Path
 from urllib.parse import quote, urlparse
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app.db.base import create_database_tables
@@ -23,29 +23,18 @@ from app.models.lesson_draft import LESSON_DRAFT_TYPES, LessonDraft
 from app.routes.ai_settings import create_ai_settings_router
 from app.routes.course_plans import create_course_plans_router
 from app.routes.courses import create_courses_router
+from app.routes.drafts import create_drafts_router
 from app.routes.lessons import create_lessons_router
 from app.routes.materials import create_materials_router
 from app.routes.outlines import create_outlines_router
 from app.services.ai import provider as ai_provider
-from app.services.ai.deepseek_client import get_default_deepseek_model
-from app.services.ai.lesson_draft_ai_service import (
-    generate_single_lesson_draft_with_ai,
-)
 from app.services.ai.lesson_draft_service import (
     DRAFT_TYPE_LABELS,
     DiagnosticQuestionBlock,
     parse_diagnostic_probe_question_blocks,
     write_chaoxing_template_xlsx,
 )
-from app.services.ai.session_key_store import (
-    SESSION_COOKIE_NAME,
-    get_session_api_key,
-    get_session_selected_model,
-)
-from app.services.teaching_prep_reference_service import (
-    TEACHING_PREP_REFERENCE_DRAFT_TYPE,
-    generate_teaching_prep_reference,
-)
+from app.services.teaching_prep_reference_service import TEACHING_PREP_REFERENCE_DRAFT_TYPE
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
@@ -343,283 +332,23 @@ app.include_router(
         _lesson_material_category_label,
     )
 )
-
-
-@app.get("/ui-v2/lessons/{lesson_id}/diagnostic-probe", response_class=HTMLResponse)
-async def show_diagnostic_probe_v2(
-    lesson_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-) -> HTMLResponse:
-    """课前学情测试 V2 preview。"""
-
-    lesson = db.scalar(
-        select(Lesson)
-        .options(selectinload(Lesson.course))
-        .where(Lesson.id == lesson_id)
+app.include_router(
+    create_drafts_router(
+        templates,
+        sanitize_next_path,
+        lambda func, *args, **kwargs: run_in_threadpool(func, *args, **kwargs),
+        _get_latest_knowledge_outline,
+        _get_lesson_drafts,
+        _get_lesson_draft_by_type,
+        _learning_guide_dependency_message,
+        _upsert_lesson_drafts,
+        _safe_export_filename,
+        _append_query_param,
+        _diagnostic_probe_view_context,
+        DRAFT_TYPE_LABELS,
+        LESSON_DRAFT_STATUS_LABELS,
     )
-    if lesson is None:
-        raise HTTPException(status_code=404, detail="课次不存在")
-
-    draft = _get_lesson_draft_by_type(db, lesson.id, "diagnostic_probe")
-    chaoxing_filename = _safe_export_filename(request.query_params.get("chaoxing_file"), ".xlsx")
-    fallback_message = (
-        "DeepSeek 响应较慢、调用失败或当前未设置 API Key，已回退为本地结构化草稿。你可以稍后重试，或减少材料后再生成。"
-        if request.query_params.get("draft_fallback") == "1"
-        else None
-    )
-    return templates.TemplateResponse(
-        request,
-        "diagnostic_probe_v2.html",
-        {
-            "lesson": lesson,
-            "outline": _get_latest_knowledge_outline(db, lesson.id),
-            "draft": draft,
-            "draft_status_labels": LESSON_DRAFT_STATUS_LABELS,
-            "chaoxing_export_url": f"/exports/chaoxing/{chaoxing_filename}" if chaoxing_filename else None,
-            "fallback_message": fallback_message,
-            **_diagnostic_probe_view_context(draft),
-        },
-    )
-
-
-@app.get("/ui-v2/lessons/{lesson_id}/learning-guides", response_class=HTMLResponse)
-async def show_learning_guides_v2(
-    lesson_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-) -> HTMLResponse:
-    """学生导学案 V2 preview。"""
-
-    lesson = db.scalar(
-        select(Lesson)
-        .options(selectinload(Lesson.course))
-        .where(Lesson.id == lesson_id)
-    )
-    if lesson is None:
-        raise HTTPException(status_code=404, detail="课次不存在")
-
-    guide_drafts = {
-        draft.draft_type: draft
-        for draft in _get_lesson_drafts(db, lesson.id)
-        if draft.draft_type in {"guide_low", "guide_mid", "guide_high"}
-    }
-    fallback_message = (
-        "DeepSeek 响应较慢、调用失败或当前未设置 API Key，已回退为本地结构化草稿。你可以稍后重试，或减少材料后再生成。"
-        if request.query_params.get("draft_fallback") == "1"
-        else None
-    )
-    return templates.TemplateResponse(
-        request,
-        "learning_guides_v2.html",
-        {
-            "lesson": lesson,
-            "outline": _get_latest_knowledge_outline(db, lesson.id),
-            "guide_low": guide_drafts.get("guide_low"),
-            "guide_mid": guide_drafts.get("guide_mid"),
-            "guide_high": guide_drafts.get("guide_high"),
-            "draft_status_labels": LESSON_DRAFT_STATUS_LABELS,
-            "fallback_message": fallback_message,
-            "dependency_message": request.query_params.get("dependency_message") or None,
-        },
-    )
-
-
-@app.get("/lessons/{lesson_id}/drafts", response_class=HTMLResponse)
-async def show_lesson_drafts(
-    lesson_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-) -> HTMLResponse:
-    """显示导学案前测与三阶导学案草稿。"""
-
-    lesson = db.get(Lesson, lesson_id)
-    if lesson is None:
-        raise HTTPException(status_code=404, detail="课次不存在")
-
-    outline = _get_latest_knowledge_outline(db, lesson.id)
-    drafts = _get_lesson_drafts(db, lesson.id)
-    chaoxing_filename = _safe_export_filename(request.query_params.get("chaoxing_file"), ".xlsx")
-    fallback_message = (
-        "DeepSeek 响应较慢、调用失败或当前未设置 API Key，已回退为本地结构化草稿。你可以稍后重试，或减少材料后再生成。"
-        if request.query_params.get("draft_fallback") == "1"
-        else None
-    )
-    return templates.TemplateResponse(
-        request,
-        "lesson_drafts.html",
-        {
-            "lesson": lesson,
-            "outline": outline,
-            "drafts": drafts,
-            "draft_type_labels": DRAFT_TYPE_LABELS,
-            "draft_status_labels": LESSON_DRAFT_STATUS_LABELS,
-            "has_low_guide": any(draft.draft_type == "guide_low" for draft in drafts),
-            "chaoxing_export_url": f"/exports/chaoxing/{chaoxing_filename}" if chaoxing_filename else None,
-            "error_message": None if outline else "请先生成并保存知识主干，再生成课前学情测试与学生导学案草稿。",
-            "fallback_message": fallback_message,
-        },
-    )
-
-
-@app.post("/lessons/{lesson_id}/drafts/generate")
-async def generate_lesson_drafts_route(
-    lesson_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-) -> RedirectResponse:
-    """兼容旧入口：只生成或更新课前学情测试，不连带生成导学案。"""
-
-    lesson = db.get(Lesson, lesson_id)
-    if lesson is None:
-        raise HTTPException(status_code=404, detail="课次不存在")
-
-    outline = _get_latest_knowledge_outline(db, lesson.id)
-    if outline is None:
-        return RedirectResponse(url=f"/lessons/{lesson.id}/drafts", status_code=303)
-
-    session_id = request.cookies.get(SESSION_COOKIE_NAME)
-    draft, used_fallback = await run_in_threadpool(
-        generate_single_lesson_draft_with_ai,
-        lesson,
-        outline,
-        "diagnostic_probe",
-        get_session_api_key(session_id),
-        get_session_selected_model(session_id) or get_default_deepseek_model(),
-    )
-    _upsert_lesson_drafts(db, lesson, outline, [draft])
-    db.commit()
-    suffix = "?draft_fallback=1" if used_fallback else ""
-    return RedirectResponse(url=f"/lessons/{lesson.id}/drafts{suffix}", status_code=303)
-
-
-@app.post("/lessons/{lesson_id}/drafts/generate/teaching_prep_reference")
-async def generate_teaching_prep_reference_route(
-    lesson_id: int,
-    request: Request,
-    return_to: str = Form(""),
-    db: Session = Depends(get_db),
-) -> RedirectResponse:
-    """生成或更新备课参考建议草稿。"""
-
-    lesson = db.scalar(
-        select(Lesson)
-        .options(selectinload(Lesson.materials), selectinload(Lesson.course))
-        .where(Lesson.id == lesson_id)
-    )
-    if lesson is None:
-        raise HTTPException(status_code=404, detail="课次不存在")
-
-    materials = db.scalars(
-        select(LessonMaterial)
-        .where(LessonMaterial.lesson_id == lesson.id)
-        .order_by(LessonMaterial.id)
-    ).all()
-    outline = _get_latest_knowledge_outline(db, lesson.id)
-    session_id = request.cookies.get(SESSION_COOKIE_NAME)
-    draft, _used_fallback = await run_in_threadpool(
-        generate_teaching_prep_reference,
-        lesson,
-        materials,
-        outline,
-        get_session_api_key(session_id),
-        get_session_selected_model(session_id) or get_default_deepseek_model(),
-    )
-    _upsert_lesson_drafts(db, lesson, outline, [draft])
-    db.commit()
-    redirect_to = sanitize_next_path(return_to) or f"/lessons/{lesson.id}/drafts"
-    return RedirectResponse(url=redirect_to, status_code=303)
-
-
-@app.post("/lessons/{lesson_id}/drafts/generate/{draft_type}")
-async def generate_tiered_lesson_draft_route(
-    lesson_id: int,
-    draft_type: str,
-    request: Request,
-    return_to: str = Form(""),
-    db: Session = Depends(get_db),
-) -> RedirectResponse:
-    """按需生成或更新单个导学草稿。"""
-
-    if draft_type not in LESSON_DRAFT_TYPES:
-        raise HTTPException(status_code=404, detail="导学草稿类型不存在")
-
-    lesson = db.get(Lesson, lesson_id)
-    if lesson is None:
-        raise HTTPException(status_code=404, detail="课次不存在")
-
-    outline = _get_latest_knowledge_outline(db, lesson.id)
-    if outline is None:
-        return RedirectResponse(
-            url=sanitize_next_path(return_to) or f"/lessons/{lesson.id}/drafts",
-            status_code=303,
-        )
-
-    low_guide = _get_lesson_draft_by_type(db, lesson.id, "guide_low")
-    mid_guide = _get_lesson_draft_by_type(db, lesson.id, "guide_mid")
-    dependency_message = _learning_guide_dependency_message(draft_type, low_guide is not None, mid_guide is not None)
-    if dependency_message:
-        redirect_to = sanitize_next_path(return_to) or f"/lessons/{lesson.id}/drafts"
-        return RedirectResponse(
-            url=_append_query_param(redirect_to, "dependency_message", dependency_message),
-            status_code=303,
-        )
-
-    session_id = request.cookies.get(SESSION_COOKIE_NAME)
-    related_drafts = {
-        related_type: draft.content
-        for related_type, draft in {"guide_low": low_guide, "guide_mid": mid_guide}.items()
-        if draft is not None
-    }
-    api_key = get_session_api_key(session_id)
-    selected_model = get_session_selected_model(session_id) or get_default_deepseek_model()
-    if api_key:
-        draft, used_fallback = await run_in_threadpool(
-            generate_single_lesson_draft_with_ai,
-            lesson,
-            outline,
-            draft_type,
-            api_key,
-            selected_model,
-            related_drafts,
-        )
-    else:
-        draft, used_fallback = generate_single_lesson_draft_with_ai(
-            lesson,
-            outline,
-            draft_type,
-            None,
-            selected_model,
-            related_drafts,
-        )
-    _upsert_lesson_drafts(db, lesson, outline, [draft])
-    db.commit()
-    redirect_to = sanitize_next_path(return_to) or f"/lessons/{lesson.id}/drafts"
-    if used_fallback:
-        redirect_to = _append_query_param(redirect_to, "draft_fallback", "1")
-    return RedirectResponse(url=redirect_to, status_code=303)
-
-
-@app.post("/lessons/{lesson_id}/drafts/{draft_id}/save")
-async def save_lesson_draft(
-    lesson_id: int,
-    draft_id: int,
-    title: str = Form(...),
-    content: str = Form(...),
-    return_to: str = Form(""),
-    db: Session = Depends(get_db),
-) -> RedirectResponse:
-    """保存教师编辑后的导学草稿。"""
-
-    draft = db.get(LessonDraft, draft_id)
-    if draft is None or draft.lesson_id != lesson_id:
-        raise HTTPException(status_code=404, detail="导学草稿不存在")
-
-    draft.title = title.strip() or draft.title
-    draft.content = content.strip()
-    draft.status = "reviewed"
-    db.commit()
-    return RedirectResponse(url=sanitize_next_path(return_to) or f"/lessons/{lesson_id}/drafts", status_code=303)
+)
 
 
 @app.post("/lessons/{lesson_id}/drafts/{draft_id}/export-chaoxing")

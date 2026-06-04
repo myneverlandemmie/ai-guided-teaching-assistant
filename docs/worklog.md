@@ -49,3 +49,14 @@
 - 未完成 / 待确认：本轮未拆 drafts、exports；未做人工页面验收。
 - 风险点：本轮为 route 搬迁，主要风险在知识主干生成失败时 V2 资料整理页 fallback 上下文、知识主干保存后的 return_to 跳转和既有测试 monkeypatch 依赖；已通过自动化测试覆盖基础行为，但仍建议人工点验关键页面。
 - 下一轮建议：按“一轮只迁移一组 route”继续拆 `drafts.py` 或 `exports.py`，不要与 UI、数据库或文档治理混做。
+
+## 2026-06-04 12:05 +08｜main.py 草稿 route 拆分
+
+- 日期时间：2026-06-04 12:05 +08
+- 本轮目标：把备课参考建议、课前学情测试、学生导学案、草稿列表、草稿生成和草稿保存相关 route 从 `backend/app/main.py` 拆到 `backend/app/routes/drafts.py`，保持 path、模板、表单字段、redirect、fallback 和 upsert 行为不变。
+- 已完成内容：新增 `create_drafts_router`，迁移草稿 / 前测 / 导学案相关 7 个 route；保持 `POST /lessons/{lesson_id}/drafts/generate/teaching_prep_reference` 在 `POST /lessons/{lesson_id}/drafts/generate/{draft_type}` 之前注册；`main.py` 仅新增 drafts router 注册并删除已迁移重复 route；未迁移学习通导出、导出下载、Markdown 下载相关 route。
+- 修改文件：`backend/app/main.py`、`backend/app/routes/drafts.py`、`docs/worklog.md`。
+- 测试结果：已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `157 passed in 45.78s`；已运行 `git diff --check`，无输出。
+- 未完成 / 待确认：本轮未拆 exports；未做人工页面验收。
+- 风险点：本轮为 route 搬迁，主要风险在前测 / 导学案 V2 页面查询参数展示、任务包依赖提示、草稿 fallback 标记、备课参考建议生成和草稿保存 return_to 跳转；已通过自动化测试覆盖基础行为，但仍建议人工点验关键页面。
+- 下一轮建议：按“一轮只迁移一组 route”继续拆 `backend/app/routes/exports.py`，只迁移学习通导出、导出下载和 Markdown 下载相关 route。
