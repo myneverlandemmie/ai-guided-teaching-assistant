@@ -38,3 +38,14 @@
 - 未完成 / 待确认：后续待拆 `outlines`、`drafts`、`exports`。
 - 风险点：`main.py` 中仍有知识主干、草稿生成 / 保存、导出下载相关 route 和辅助函数，拆分时需保持 route path、模板名称、表单字段、redirect 行为不变。
 - 下一轮建议：优先选择 `outlines.py`、`drafts.py`、`exports.py` 中的一组作为单轮拆分目标，拆分后运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`。
+
+## 2026-06-04 11:27 +08｜main.py 知识主干 route 拆分
+
+- 日期时间：2026-06-04 11:27 +08
+- 本轮目标：把知识主干生成、查看、保存 3 个 route 从 `backend/app/main.py` 拆到 `backend/app/routes/outlines.py`，保持 path、模板、表单字段、redirect 和 DeepSeek / fallback 行为不变。
+- 已完成内容：新增 `create_outlines_router`，迁移 `POST /lessons/{lesson_id}/knowledge-outline/generate`、`GET /lessons/{lesson_id}/knowledge-outline`、`POST /knowledge-outlines/{outline_id}/save`；`main.py` 仅新增 outlines router 注册并删除已迁移重复 route；保留 `main.ai_provider` 与动态 threadpool 注入以兼容既有测试和运行时依赖。
+- 修改文件：`backend/app/main.py`、`backend/app/routes/outlines.py`、`docs/worklog.md`。
+- 测试结果：已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `157 passed in 45.44s`。
+- 未完成 / 待确认：本轮未拆 drafts、exports；未做人工页面验收。
+- 风险点：本轮为 route 搬迁，主要风险在知识主干生成失败时 V2 资料整理页 fallback 上下文、知识主干保存后的 return_to 跳转和既有测试 monkeypatch 依赖；已通过自动化测试覆盖基础行为，但仍建议人工点验关键页面。
+- 下一轮建议：按“一轮只迁移一组 route”继续拆 `drafts.py` 或 `exports.py`，不要与 UI、数据库或文档治理混做。

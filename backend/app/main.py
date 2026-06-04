@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from types import SimpleNamespace
 from urllib.parse import quote, urlparse
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
@@ -26,10 +25,9 @@ from app.routes.course_plans import create_course_plans_router
 from app.routes.courses import create_courses_router
 from app.routes.lessons import create_lessons_router
 from app.routes.materials import create_materials_router
+from app.routes.outlines import create_outlines_router
 from app.services.ai import provider as ai_provider
-from app.services.ai.deepseek_client import DeepSeekProviderError
 from app.services.ai.deepseek_client import get_default_deepseek_model
-from app.services.ai.sanitizer import sanitize_text_for_outline
 from app.services.ai.lesson_draft_ai_service import (
     generate_single_lesson_draft_with_ai,
 )
@@ -330,6 +328,21 @@ app.include_router(
         _lesson_material_category_label,
     )
 )
+app.include_router(
+    create_outlines_router(
+        templates,
+        sanitize_next_path,
+        require_same_origin,
+        lambda func, *args, **kwargs: run_in_threadpool(func, *args, **kwargs),
+        _get_latest_knowledge_outline,
+        _get_lesson_draft_by_type,
+        MATERIAL_TYPE_LABELS,
+        KNOWLEDGE_OUTLINE_STATUS_LABELS,
+        LESSON_DRAFT_STATUS_LABELS,
+        MATERIAL_CATEGORY_OPTIONS,
+        _lesson_material_category_label,
+    )
+)
 
 
 @app.get("/ui-v2/lessons/{lesson_id}/diagnostic-probe", response_class=HTMLResponse)
@@ -408,124 +421,6 @@ async def show_learning_guides_v2(
             "draft_status_labels": LESSON_DRAFT_STATUS_LABELS,
             "fallback_message": fallback_message,
             "dependency_message": request.query_params.get("dependency_message") or None,
-        },
-    )
-
-
-@app.post("/lessons/{lesson_id}/knowledge-outline/generate")
-async def generate_lesson_knowledge_outline(
-    lesson_id: int,
-    request: Request,
-    return_to: str = Form(""),
-    db: Session = Depends(get_db),
-) -> Response:
-    """使用当前 AI Provider 为课次生成知识主干初稿。"""
-
-    require_same_origin(request)
-    redirect_to = sanitize_next_path(return_to) or f"/lessons/{lesson_id}/knowledge-outline"
-    lesson = db.get(Lesson, lesson_id)
-    if lesson is None:
-        raise HTTPException(status_code=404, detail="课次不存在")
-
-    materials = db.scalars(
-        select(LessonMaterial)
-        .where(LessonMaterial.lesson_id == lesson.id)
-        .order_by(LessonMaterial.id)
-    ).all()
-    session_id = request.cookies.get(SESSION_COOKIE_NAME)
-    api_key = get_session_api_key(session_id)
-    selected_model = get_session_selected_model(session_id) or get_default_deepseek_model()
-    lesson_for_ai = SimpleNamespace(
-        lesson_code=lesson.lesson_code,
-        title=lesson.title,
-        content_summary=lesson.content_summary,
-    )
-    materials_for_ai = [SimpleNamespace(content=material.content) for material in materials]
-    try:
-        generated_outline = await run_in_threadpool(
-            ai_provider.generate_knowledge_outline_with_provider,
-            lesson_for_ai,
-            materials_for_ai,
-            api_key,
-            selected_model,
-        )
-    except DeepSeekProviderError as exc:
-        if redirect_to.startswith("/ui-v2/"):
-            materials = db.scalars(
-                select(LessonMaterial)
-                .where(LessonMaterial.lesson_id == lesson.id)
-                .order_by(LessonMaterial.id.desc())
-            ).all()
-            return templates.TemplateResponse(
-                request,
-                "lesson_materials_outline_v2.html",
-                {
-                    "lesson": lesson,
-                    "materials": materials,
-                    "knowledge_outline": _get_latest_knowledge_outline(db, lesson.id),
-                    "material_type_labels": MATERIAL_TYPE_LABELS,
-                    "material_category_options": MATERIAL_CATEGORY_OPTIONS,
-                    "material_category_label": _lesson_material_category_label,
-                    "knowledge_outline_status_labels": KNOWLEDGE_OUTLINE_STATUS_LABELS,
-                    "teaching_prep_reference": _get_lesson_draft_by_type(
-                        db,
-                        lesson.id,
-                        TEACHING_PREP_REFERENCE_DRAFT_TYPE,
-                    ),
-                    "draft_status_labels": LESSON_DRAFT_STATUS_LABELS,
-                    "error_message": exc.user_message,
-                },
-                status_code=400,
-            )
-        return templates.TemplateResponse(
-            request,
-            "knowledge_outline.html",
-            {
-                "lesson": lesson,
-                "outline": _get_latest_knowledge_outline(db, lesson.id),
-                "knowledge_outline_status_labels": KNOWLEDGE_OUTLINE_STATUS_LABELS,
-                "error_message": exc.user_message,
-                "ai_provider": ai_provider.get_ai_provider_name(),
-            },
-            status_code=400,
-        )
-
-    sanitized_generated_content = sanitize_text_for_outline(generated_outline.content)
-    # AI 初稿和教师编辑稿初始一致，后续必须由教师编辑保存。
-    outline = KnowledgeOutline(
-        lesson_id=lesson.id,
-        ai_raw_output=sanitized_generated_content,
-        edited_content=sanitized_generated_content,
-        status="draft",
-        generated_by_model=generated_outline.model_name,
-    )
-    db.add(outline)
-    db.commit()
-    return RedirectResponse(url=redirect_to, status_code=303)
-
-
-@app.get("/lessons/{lesson_id}/knowledge-outline", response_class=HTMLResponse)
-async def show_lesson_knowledge_outline(
-    lesson_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-) -> HTMLResponse:
-    """显示课次知识主干编辑页面。"""
-
-    lesson = db.get(Lesson, lesson_id)
-    if lesson is None:
-        raise HTTPException(status_code=404, detail="课次不存在")
-
-    outline = _get_latest_knowledge_outline(db, lesson.id)
-    return templates.TemplateResponse(
-        request,
-        "knowledge_outline.html",
-        {
-            "lesson": lesson,
-            "outline": outline,
-            "knowledge_outline_status_labels": KNOWLEDGE_OUTLINE_STATUS_LABELS,
-            "error_message": None,
-            "ai_provider": ai_provider.get_ai_provider_name(),
         },
     )
 
@@ -794,27 +689,4 @@ async def download_lesson_draft_markdown(
         content=draft.content,
         media_type="text/markdown; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-@app.post("/knowledge-outlines/{outline_id}/save")
-async def save_knowledge_outline(
-    outline_id: int,
-    edited_content: str = Form(...),
-    return_to: str = Form(""),
-    db: Session = Depends(get_db),
-) -> RedirectResponse:
-    """保存教师编辑后的知识主干。"""
-
-    outline = db.get(KnowledgeOutline, outline_id)
-    if outline is None:
-        raise HTTPException(status_code=404, detail="知识主干不存在")
-
-    # 保存教师复核后的版本；后续页面使用 edited_content 展示。
-    outline.edited_content = edited_content.strip()
-    outline.status = "reviewed"
-    db.commit()
-    return RedirectResponse(
-        url=sanitize_next_path(return_to) or f"/lessons/{outline.lesson_id}/knowledge-outline",
-        status_code=303,
     )
