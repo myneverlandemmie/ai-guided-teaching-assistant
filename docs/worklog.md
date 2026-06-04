@@ -60,3 +60,14 @@
 - 未完成 / 待确认：本轮未拆 exports；未做人工页面验收。
 - 风险点：本轮为 route 搬迁，主要风险在前测 / 导学案 V2 页面查询参数展示、任务包依赖提示、草稿 fallback 标记、备课参考建议生成和草稿保存 return_to 跳转；已通过自动化测试覆盖基础行为，但仍建议人工点验关键页面。
 - 下一轮建议：按“一轮只迁移一组 route”继续拆 `backend/app/routes/exports.py`，只迁移学习通导出、导出下载和 Markdown 下载相关 route。
+
+## 2026-06-04 13:50 +08｜main.py 导出 route 拆分
+
+- 日期时间：2026-06-04 13:50 +08
+- 本轮目标：把学习通习题文件导出、导出文件下载和 Markdown 下载相关 route 从 `backend/app/main.py` 拆到 `backend/app/routes/exports.py`，保持 path、目录语义、文件名校验、响应头、media_type、redirect 和错误处理不变。
+- 已完成内容：新增 `create_exports_router`，迁移 `POST /lessons/{lesson_id}/drafts/{draft_id}/export-chaoxing`、`GET /exports/chaoxing/{filename}`、`GET /lessons/{lesson_id}/drafts/{draft_id}/download-md`；`main.py` 仅新增 exports router 注册并删除已迁移重复 route；导出目录通过 lambda 注入以保持运行时目录覆盖行为不变。
+- 修改文件：`backend/app/main.py`、`backend/app/routes/exports.py`、`docs/worklog.md`。
+- 测试结果：已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `157 passed in 43.22s`；已运行 `git diff --check`，无输出。
+- 未完成 / 待确认：未做人工页面验收；`backend/app/main.py` 中仍保留多组 route 共用 helper 和常量，后续是否进一步整理需单独安排。
+- 风险点：本轮为 route 搬迁，主要风险在学习通 xlsx 导出文件写入目录、非法文件名拒绝、下载响应头和 Markdown 下载文件名；已通过自动化测试覆盖基础行为，但仍建议人工点验下载链路。
+- 下一轮建议：如继续重构，可单独评估 `backend/app/main.py` 中剩余公共 helper / 常量是否需要归并，但不要与功能变更混做。

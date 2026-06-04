@@ -7,8 +7,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse, Response
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
@@ -24,6 +23,7 @@ from app.routes.ai_settings import create_ai_settings_router
 from app.routes.course_plans import create_course_plans_router
 from app.routes.courses import create_courses_router
 from app.routes.drafts import create_drafts_router
+from app.routes.exports import create_exports_router
 from app.routes.lessons import create_lessons_router
 from app.routes.materials import create_materials_router
 from app.routes.outlines import create_outlines_router
@@ -32,7 +32,6 @@ from app.services.ai.lesson_draft_service import (
     DRAFT_TYPE_LABELS,
     DiagnosticQuestionBlock,
     parse_diagnostic_probe_question_blocks,
-    write_chaoxing_template_xlsx,
 )
 from app.services.teaching_prep_reference_service import TEACHING_PREP_REFERENCE_DRAFT_TYPE
 
@@ -349,73 +348,15 @@ app.include_router(
         LESSON_DRAFT_STATUS_LABELS,
     )
 )
-
-
-@app.post("/lessons/{lesson_id}/drafts/{draft_id}/export-chaoxing")
-async def export_diagnostic_probe_to_chaoxing(
-    lesson_id: int,
-    draft_id: int,
-    return_to: str = Form(""),
-    db: Session = Depends(get_db),
-) -> RedirectResponse:
-    """将导学案前测导出为学习通题库导入 xlsx。"""
-
-    lesson = db.get(Lesson, lesson_id)
-    draft = db.get(LessonDraft, draft_id)
-    if lesson is None or draft is None or draft.lesson_id != lesson_id:
-        raise HTTPException(status_code=404, detail="导学草稿不存在")
-    if draft.draft_type != "diagnostic_probe":
-        raise HTTPException(status_code=400, detail="只有导学案前测可以导出学习通题库模板")
-
-    CHAOXING_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-    lesson_part = _safe_export_part(lesson.lesson_code, str(lesson.id))
-    filename = f"lesson_{lesson.id}_{lesson_part}_diagnostic_probe.xlsx"
-    output_path = CHAOXING_EXPORT_DIR / filename
-    write_chaoxing_template_xlsx(lesson, draft, output_path)
-    redirect_to = sanitize_next_path(return_to) or f"/lessons/{lesson.id}/drafts"
-    return RedirectResponse(url=_append_query_param(redirect_to, "chaoxing_file", filename), status_code=303)
-
-
-@app.get("/exports/chaoxing/{filename}")
-async def download_chaoxing_export(filename: str) -> Response:
-    """下载已生成的学习通题库导入文件。"""
-
-    safe_filename = _safe_export_filename(filename, ".xlsx")
-    if safe_filename is None:
-        raise HTTPException(status_code=404, detail="导出文件不存在")
-    file_path = CHAOXING_EXPORT_DIR / safe_filename
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="导出文件不存在")
-    return Response(
-        content=file_path.read_bytes(),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
+app.include_router(
+    create_exports_router(
+        sanitize_next_path,
+        _safe_export_part,
+        _safe_export_filename,
+        _append_query_param,
+        lambda: CHAOXING_EXPORT_DIR,
+        lambda: GUIDE_EXPORT_DIR,
+        LESSON_DRAFT_DOWNLOAD_NAME_PARTS,
+        TEACHING_PREP_REFERENCE_DRAFT_TYPE,
     )
-
-
-@app.get("/lessons/{lesson_id}/drafts/{draft_id}/download-md")
-async def download_lesson_draft_markdown(
-    lesson_id: int,
-    draft_id: int,
-    db: Session = Depends(get_db),
-) -> Response:
-    """将当前导学案或备课参考建议草稿下载为 Markdown。"""
-
-    lesson = db.get(Lesson, lesson_id)
-    draft = db.get(LessonDraft, draft_id)
-    if lesson is None or draft is None or draft.lesson_id != lesson_id:
-        raise HTTPException(status_code=404, detail="导学草稿不存在")
-    downloadable_types = {"guide_low", "guide_mid", "guide_high", TEACHING_PREP_REFERENCE_DRAFT_TYPE}
-    if draft.draft_type not in downloadable_types:
-        raise HTTPException(status_code=400, detail="只有导学案或备课参考建议草稿可以下载 Markdown")
-
-    GUIDE_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-    filename_part = LESSON_DRAFT_DOWNLOAD_NAME_PARTS.get(draft.draft_type, "learning_draft")
-    filename = f"lesson_{lesson.id}_{filename_part}.md"
-    output_path = GUIDE_EXPORT_DIR / filename
-    output_path.write_text(draft.content, encoding="utf-8")
-    return Response(
-        content=draft.content,
-        media_type="text/markdown; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+)
