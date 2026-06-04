@@ -71,3 +71,14 @@
 - 未完成 / 待确认：未做人工页面验收；`backend/app/main.py` 中仍保留多组 route 共用 helper 和常量，后续是否进一步整理需单独安排。
 - 风险点：本轮为 route 搬迁，主要风险在学习通 xlsx 导出文件写入目录、非法文件名拒绝、下载响应头和 Markdown 下载文件名；已通过自动化测试覆盖基础行为，但仍建议人工点验下载链路。
 - 下一轮建议：如继续重构，可单独评估 `backend/app/main.py` 中剩余公共 helper / 常量是否需要归并，但不要与功能变更混做。
+
+## 2026-06-04 15:02 +08｜main.py 路由拆分收尾审计
+
+- 日期时间：2026-06-04 15:02 +08
+- 本轮目标：对 `backend/app/main.py` 路由拆分完成状态做收尾审计，生成审计报告，不修改业务代码。
+- 已完成内容：执行 Git 状态、文件行数、`@app.*` route 装饰器、`include_router` 注册、routes 目录列表和 `main.py` 当前职责检查；新增 `docs/audit/main_py_route_refactor_closing_audit.md`，记录拆分结论、文件规模、已拆模块、剩余职责、helper / 常量建议分类、风险和下一阶段建议。
+- 修改文件：`docs/audit/main_py_route_refactor_closing_audit.md`、`docs/worklog.md`。
+- 测试结果：未运行 pytest，原因：本轮仅文档审计，未修改业务代码、模板、测试或依赖配置。
+- 未完成 / 待确认：未做人工页面验收；审计报告中的 helper / 常量迁移仅为建议，未执行代码移动。
+- 风险点：`main.py` 虽无 `@app.*` route 装饰器，但仍保留多组公共 helper 和常量；后续若继续整理，应单独安排并用测试和人工验收保护导出、fallback、upsert 等关键行为。
+- 下一轮建议：先进入下一阶段产品化改进，优先做中文错误提示与异常处理统一；如做代码整理，避免与 UI、数据库、测试或功能变更混做。
