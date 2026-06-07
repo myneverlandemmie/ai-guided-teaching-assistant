@@ -181,3 +181,14 @@
 - 未完成 / 待确认：本轮未拆 `test_outlines_routes.py`；未抽 `conftest.py`；未修改业务代码、route、模板、数据库模型或测试夹具语义；未移动核心验证草稿 / 任务包生成但带辅助下载断言的测试。
 - 风险点：`test_exports_routes.py` 当前仍通过 `tests.test_course_plan_pages` 复用 `_build_test_client`、`_create_course`、`_create_first_lesson`、`_create_reviewed_outline` 和 fixture，这是为了保持本轮最小侵入；`test_course_plan_pages.py` 仍作为共享 helper 承载文件，后续如要继续收口应单独评估 helper / fixture 迁移，不要与功能测试移动混做。
 - 下一轮建议：测试拆分第一阶段已基本完成；建议做一轮测试拆分收尾审计，确认 `test_course_plan_pages.py` 剩余职责、各新测试文件规模、collect-only 数量和完整 pytest 基线。
+
+## 2026-06-07 18:07 +08｜测试拆分收尾审计
+
+- 日期时间：2026-06-07 18:07 +08
+- 本轮目标：对测试拆分专项完成状态做收尾审计，生成 `docs/audit/test_suite_split_closing_audit.md`，不修改测试文件或业务代码。
+- 已完成内容：执行 Git 状态、测试文件行数统计、pytest collect-only、完整 pytest、`test_course_plan_pages.py` 剩余测试 / helper / fixture 检查、拆分 route 测试文件列表检查和 `test_outlines_routes.py` 二级拆分风险检查；新增审计报告，记录拆分结论、当前测试文件规模、已拆分测试模块、原文件剩余职责、outlines 二级拆分判断、风险和下一阶段建议。
+- 修改文件：`docs/audit/test_suite_split_closing_audit.md`、`docs/worklog.md`。
+- 测试结果：已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest --collect-only -q`，结果 `157 tests collected in 0.78s`；已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `157 passed in 33.57s`。
+- 未完成 / 待确认：本轮未修改任何 `backend/` 文件、测试文件、模板、静态资源或业务代码；未执行 `test_outlines_routes.py` 二级拆分；未抽 `conftest.py`。
+- 风险点：`test_outlines_routes.py` 当前 1015 行，是新的最大测试文件；如继续二级拆分，需要保护 `monkeypatch`、`AI_PROVIDER`、`DEEPSEEK_ALLOWED_MODELS`、`AI_REQUEST_TIMEOUT_SECONDS`、`AI_PROMPT_MATERIAL_MAX_CHARS`、`httpx.Client` 等测试语义，并保持 `157 collected / 157 passed`。
+- 下一轮建议：如果继续测试治理，优先小范围拆 `test_outlines_routes.py` 的模型配置 / timeout / HTTP error 和 prompt 边界同步测试；如果产品节奏优先，可先转入 Phase 2 中文错误提示与异常处理统一；`conftest.py` / shared helper 整理建议后置并单独安排。
