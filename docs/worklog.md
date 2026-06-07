@@ -170,3 +170,14 @@
 - 未完成 / 待确认：本轮未拆 exports / 下载测试；未修改已有 draft / guide 相关测试文件；未抽 `conftest.py`；未修改业务代码、route、模板、数据库模型或测试夹具语义。
 - 风险点：`test_drafts_routes.py` 当前仍通过 `tests.test_course_plan_pages` 复用 `_build_test_client`、`_create_course`、`_create_first_lesson`、`_create_reviewed_outline` 和 fixture，这是为了保持本轮最小侵入；其中任务包生成测试包含辅助性的 Markdown 下载响应头断言，但核心验证仍是 drafts / 任务包生成，后续 exports 拆分时应继续把真正导出下载测试留在 exports 范围。
 - 下一轮建议：如继续测试拆分专项，建议拆 exports / 学习通导出和 Markdown 下载相关 route 测试，继续保持一轮只拆一类测试，并对比 collect-only 数量和完整 pytest 结果。
+
+## 2026-06-07 18:00 +08｜测试文件拆分第八轮：导出下载 route
+
+- 日期时间：2026-06-07 18:00 +08
+- 本轮目标：从 `backend/tests/test_course_plan_pages.py` 中拆出学习通习题文件导出、导出文件下载和 Markdown 下载相关测试到 `backend/tests/test_exports_routes.py`，保持测试语义和断言不变。
+- 已完成内容：迁移 3 个明确属于 exports / 下载范围的测试，覆盖课前学情测试草稿导出学习通 xlsx 模板、无课程名称时学习通目录 fallback、基础导学案 Markdown 下载内容与导出文件写入；原文件仅保留 `test_no_sql_python_c_grading_demo_routes_added` 安全边界测试和共享 helper / fixture；未修改已有 `test_chaoxing_export_from_ai_probe.py`。
+- 修改文件：`backend/tests/test_course_plan_pages.py`、`backend/tests/test_exports_routes.py`、`docs/worklog.md`。
+- 测试结果：拆分前已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest --collect-only -q`，结果 `157 tests collected in 1.40s`；拆分后已运行同一 collect-only 命令，结果 `157 tests collected in 1.38s`；已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `157 passed in 33.25s`；已运行 `git diff --check`，无输出。
+- 未完成 / 待确认：本轮未拆 `test_outlines_routes.py`；未抽 `conftest.py`；未修改业务代码、route、模板、数据库模型或测试夹具语义；未移动核心验证草稿 / 任务包生成但带辅助下载断言的测试。
+- 风险点：`test_exports_routes.py` 当前仍通过 `tests.test_course_plan_pages` 复用 `_build_test_client`、`_create_course`、`_create_first_lesson`、`_create_reviewed_outline` 和 fixture，这是为了保持本轮最小侵入；`test_course_plan_pages.py` 仍作为共享 helper 承载文件，后续如要继续收口应单独评估 helper / fixture 迁移，不要与功能测试移动混做。
+- 下一轮建议：测试拆分第一阶段已基本完成；建议做一轮测试拆分收尾审计，确认 `test_course_plan_pages.py` 剩余职责、各新测试文件规模、collect-only 数量和完整 pytest 基线。
