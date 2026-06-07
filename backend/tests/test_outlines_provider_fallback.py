@@ -11,7 +11,7 @@ from app.services.ai.deepseek_client import (
     DeepSeekProviderError,
 )
 from app.services.ai.provider import GeneratedOutline
-from tests.test_course_plan_pages import (
+from tests.support.course_plan_helpers import (
     SAME_ORIGIN_HEADERS,
     _build_test_client,
     _create_course,

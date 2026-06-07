@@ -1,6 +1,5 @@
 from collections.abc import Generator
 from pathlib import Path
-import re
 
 import httpx
 import pytest
@@ -12,23 +11,10 @@ from app.db.base import create_database_tables
 from app.models.course import Course
 from app.models.course_plan import PlannedLesson
 from app.models.knowledge_outline import KnowledgeOutline
-from app.models.lesson import LessonMaterial
-from app.services.ai.deepseek_client import (
-    DeepSeekConfig,
-    DeepSeekProviderError,
-    build_knowledge_outline_prompt,
-    generate_deepseek_knowledge_outline,
-    get_allowed_deepseek_models,
-    get_deepseek_config,
-    get_default_deepseek_model,
-    is_allowed_deepseek_model,
-)
-from app.services.ai.provider import GeneratedOutline
-from app.services.ai.sanitizer import sanitize_text_for_outline
 from app.services.ai.session_key_store import clear_all_session_api_keys_for_tests
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 SAMPLE_PLAN = PROJECT_ROOT / "data" / "sample-course-plans" / "2025-2026-database-course-plan.xlsx"
 SAME_ORIGIN_HEADERS = {"origin": "http://testserver"}
 
@@ -154,15 +140,3 @@ def _create_reviewed_outline(session_factory: sessionmaker[Session], lesson_id: 
         )
         session.add(outline)
         session.commit()
-
-
-@pytest.mark.anyio
-async def test_no_sql_python_c_grading_demo_routes_added(tmp_path: Path) -> None:
-    client, _ = _build_test_client(tmp_path)
-    try:
-        for path in ["/demo-grading/sql", "/demo-grading/python", "/demo-grading/c"]:
-            response = await client.get(path)
-            assert response.status_code == 404
-    finally:
-        await client.aclose()
-        main.app.dependency_overrides.clear()

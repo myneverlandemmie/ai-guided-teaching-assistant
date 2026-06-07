@@ -49,3 +49,14 @@
 - 未完成 / 待确认：远程 GitHub 是否 push 仍待用户确认；未做人工链接点击验收。
 - 风险点：原活跃手账末尾的“outlines 二级拆分完成”仅为一句收尾标记，无单独测试结果或修改文件，本轮按原样语义归档，未补写不存在的细节。
 - 下一轮建议：进入 Phase 2 中文错误提示与异常处理统一；如继续测试治理，单独做共享 helper / `conftest.py` 专项审计。
+
+### 2026-06-07 20:03 +08｜测试共享 helper 显式复用整理
+
+- 日期时间：2026-06-07 20:03 +08
+- 本轮目标：将 `backend/tests/test_course_plan_pages.py` 中剩余共享 helper、fixture 和常量迁移到显式复用模块 `backend/tests/support/course_plan_helpers.py`，并将剩余真实测试迁移到独立测试文件，保持测试语义和 157 collected / 157 passed 基线不变。
+- 已完成内容：新增 `backend/tests/support/` 支持模块；迁移 `PROJECT_ROOT`、`SAMPLE_PLAN`、`SAME_ORIGIN_HEADERS`、`anyio_backend`、`inline_threadpool_for_tests`、`_build_test_client`、`_create_course`、`_database_contains_text`、`_upload_sample_plan`、`_create_first_lesson`、`_create_reviewed_outline`；将 `test_no_sql_python_c_grading_demo_routes_added` 迁移到 `backend/tests/test_grading_demo_routes.py`；更新 9 个测试文件的 helper import，从 `tests.test_course_plan_pages` 改为 `tests.support.course_plan_helpers`；删除已无必要内容的 `backend/tests/test_course_plan_pages.py`。
+- 修改文件：`backend/tests/support/__init__.py`、`backend/tests/support/course_plan_helpers.py`、`backend/tests/test_grading_demo_routes.py`、`backend/tests/test_ai_settings_routes.py`、`backend/tests/test_course_plans_routes.py`、`backend/tests/test_courses_routes.py`、`backend/tests/test_drafts_routes.py`、`backend/tests/test_exports_routes.py`、`backend/tests/test_lessons_routes.py`、`backend/tests/test_materials_routes.py`、`backend/tests/test_outlines_provider_fallback.py`、`backend/tests/test_outlines_routes.py`、`backend/tests/test_course_plan_pages.py`、`docs/worklog.md`。
+- 测试结果：拆分前已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest --collect-only -q`，结果 `157 tests collected in 1.43s`；拆分后已运行同一 collect-only 命令，结果 `157 tests collected in 1.63s`；已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `157 passed in 33.86s`；已运行 `git diff --check`，无输出。
+- 未完成 / 待确认：本轮未抽 `conftest.py`；未修改业务代码、route、模板、数据库模型、断言、fixture 作用域、monkeypatch 语义或 dependency override 语义；未做人工页面验收。
+- 风险点：`PROJECT_ROOT` 在新 helper 模块中需从 `parents[3]` 计算仓库根目录，以保持 `SAMPLE_PLAN` 指向原数据文件；后续如移动 helper 文件路径，需要同步确认该路径计算。
+- 下一轮建议：如继续测试治理，可单独审计是否还有局部 `_build_test_client` 重复实现；产品节奏优先时进入 Phase 2 中文错误提示与异常处理统一。

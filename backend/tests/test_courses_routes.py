@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from app import main
 from app.models.course import Course
-from tests.test_course_plan_pages import _build_test_client, anyio_backend, inline_threadpool_for_tests
+from tests.support.course_plan_helpers import _build_test_client, anyio_backend, inline_threadpool_for_tests
 
 
 @pytest.mark.anyio

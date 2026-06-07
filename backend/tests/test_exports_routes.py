@@ -9,7 +9,7 @@ from app.models.course import Course
 from app.models.lesson import Lesson
 from app.models.lesson_draft import LessonDraft
 from app.services.ai.lesson_draft_service import build_chaoxing_catalog
-from tests.test_course_plan_pages import (
+from tests.support.course_plan_helpers import (
     _build_test_client,
     _create_course,
     _create_first_lesson,

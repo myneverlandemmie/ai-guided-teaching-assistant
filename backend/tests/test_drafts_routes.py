@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from app import main
 from app.models.lesson_draft import LessonDraft
-from tests.test_course_plan_pages import (
+from tests.support.course_plan_helpers import (
     _build_test_client,
     _create_course,
     _create_first_lesson,

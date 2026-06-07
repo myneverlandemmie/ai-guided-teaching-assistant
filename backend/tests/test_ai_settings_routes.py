@@ -16,7 +16,7 @@ from app.services.ai.session_key_store import (
     has_session_api_key_for_tests,
     set_session_api_key,
 )
-from tests.test_course_plan_pages import (
+from tests.support.course_plan_helpers import (
     SAME_ORIGIN_HEADERS,
     _build_test_client,
     _database_contains_text,

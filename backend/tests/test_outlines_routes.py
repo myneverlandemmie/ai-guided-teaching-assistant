@@ -6,7 +6,7 @@ from sqlalchemy import select
 from app import main
 from app.models.course_plan import PlannedLesson
 from app.models.knowledge_outline import KnowledgeOutline
-from tests.test_course_plan_pages import (
+from tests.support.course_plan_helpers import (
     SAME_ORIGIN_HEADERS,
     _build_test_client,
     _create_course,
