@@ -192,3 +192,14 @@
 - 未完成 / 待确认：本轮未修改任何 `backend/` 文件、测试文件、模板、静态资源或业务代码；未执行 `test_outlines_routes.py` 二级拆分；未抽 `conftest.py`。
 - 风险点：`test_outlines_routes.py` 当前 1015 行，是新的最大测试文件；如继续二级拆分，需要保护 `monkeypatch`、`AI_PROVIDER`、`DEEPSEEK_ALLOWED_MODELS`、`AI_REQUEST_TIMEOUT_SECONDS`、`AI_PROMPT_MATERIAL_MAX_CHARS`、`httpx.Client` 等测试语义，并保持 `157 collected / 157 passed`。
 - 下一轮建议：如果继续测试治理，优先小范围拆 `test_outlines_routes.py` 的模型配置 / timeout / HTTP error 和 prompt 边界同步测试；如果产品节奏优先，可先转入 Phase 2 中文错误提示与异常处理统一；`conftest.py` / shared helper 整理建议后置并单独安排。
+
+## 2026-06-07 18:26 +08｜outlines 测试二级拆分第一轮：prompt 边界
+
+- 日期时间：2026-06-07 18:26 +08
+- 本轮目标：从 `backend/tests/test_outlines_routes.py` 中拆出 prompt 边界、行政信息过滤、敏感材料过滤、固定章节和材料长度限制相关测试到 `backend/tests/test_outlines_prompt_boundaries.py`，保持测试语义和断言不变。
+- 已完成内容：迁移 4 个明确属于 prompt 边界 / 安全过滤范围的测试：`test_sanitizer_covers_common_administrative_variants`、`test_deepseek_prompt_filters_sensitive_material_information`、`test_knowledge_outline_prompt_contains_fixed_sections_and_disclaimers`、`test_deepseek_prompt_prioritizes_key_material_and_limits_length`；新文件仅复制必要 import；保留 DeepSeek provider / fallback、route 页面 / 保存、模型配置、timeout 和 HTTP error 测试在 `test_outlines_routes.py`。
+- 修改文件：`backend/tests/test_outlines_routes.py`、`backend/tests/test_outlines_prompt_boundaries.py`、`docs/worklog.md`。
+- 测试结果：拆分前已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest --collect-only -q`，结果 `157 tests collected in 1.52s`；拆分后已运行同一 collect-only 命令，结果 `157 tests collected in 0.95s`；已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `157 passed in 35.91s`；已运行 `git diff --check`，无输出。
+- 未完成 / 待确认：本轮未拆 DeepSeek provider / fallback 测试，未拆 route 页面 / 保存测试，未拆模型配置 / timeout / HTTP error 测试，未抽 `conftest.py`，未修改业务代码、route、模板、数据库模型或测试夹具语义。
+- 风险点：`test_outlines_prompt_boundaries.py` 包含 `AI_PROMPT_MATERIAL_MAX_CHARS` monkeypatch 测试，后续继续拆模型配置或 provider 测试时仍需保护环境变量 monkeypatch 和 `httpx.Client` 替换语义；`test_outlines_routes.py` 当前仍有 fallback 中的敏感信息过滤测试，因其核心属于 mock fallback 行为，本轮按边界要求保留未动。
+- 下一轮建议：如继续 outlines 二级拆分，建议拆模型配置 / timeout / HTTP error 相关同步测试到独立文件，继续保持一轮只拆一类测试，并对比 collect-only 数量和完整 pytest 结果。
