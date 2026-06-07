@@ -82,3 +82,14 @@
 - 未完成 / 待确认：未做人工页面验收；审计报告中的 helper / 常量迁移仅为建议，未执行代码移动。
 - 风险点：`main.py` 虽无 `@app.*` route 装饰器，但仍保留多组公共 helper 和常量；后续若继续整理，应单独安排并用测试和人工验收保护导出、fallback、upsert 等关键行为。
 - 下一轮建议：先进入下一阶段产品化改进，优先做中文错误提示与异常处理统一；如做代码整理，避免与 UI、数据库、测试或功能变更混做。
+
+## 2026-06-07 15:55 +08｜测试文件拆分审计
+
+- 日期时间：2026-06-07 15:55 +08
+- 本轮目标：对 `backend/tests` 当前测试文件规模、测试数量、收集情况、敏感测试机制和覆盖功能分组做拆分前审计，生成审计报告，不修改测试或业务代码。
+- 已完成内容：执行 Git 状态、测试文件发现、测试文件行数统计、测试函数数量统计、pytest collect-only、完整 pytest、敏感测试机制 grep 和主要 route / 功能关键词 grep；新增 `docs/audit/test_suite_refactor_audit.md`，记录测试大文件问题、覆盖分组、高风险依赖、推荐拆分结构、拆分顺序和第一轮拆分建议。
+- 修改文件：`docs/audit/test_suite_refactor_audit.md`、`docs/worklog.md`。
+- 测试结果：已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest --collect-only -q`，结果 `157 tests collected in 1.22s`；已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `157 passed in 28.03s`。
+- 未完成 / 待确认：本轮未拆分任何测试文件，未修改 fixture、monkeypatch、dependency override 或业务代码；后续是否按建议先拆 `ai_settings` / session 相关测试需人工确认。
+- 风险点：`test_course_plan_pages.py` 规模明显偏大，且集中包含 session、API Key、课程计划、导出下载、前测 / 导学案等多类高风险覆盖；拆分时容易出现测试数量不变但断言语义弱化，需逐轮对比 collect-only 数量和完整 pytest 结果。
+- 下一轮建议：如进入测试拆分专项，第一轮建议仅从 `test_course_plan_pages.py` 中拆出 `ai_settings` / session 相关测试到独立测试文件，不同时拆 fixture、不修改业务代码、不删除或弱化断言。
