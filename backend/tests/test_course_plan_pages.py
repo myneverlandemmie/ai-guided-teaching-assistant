@@ -151,23 +151,6 @@ def test_sanitizer_covers_common_administrative_variants() -> None:
 
 
 @pytest.mark.anyio
-async def test_courses_page_is_accessible(tmp_path: Path) -> None:
-    client, session_factory = _build_test_client(tmp_path)
-    try:
-        response = await client.get("/courses")
-
-        assert response.status_code == 200
-        assert "课程列表" in response.text
-        assert "查看正式课次" in response.text
-        assert "/courses/1/lessons" in response.text
-        with session_factory() as session:
-            assert session.scalar(select(Course)) is not None
-    finally:
-        await client.aclose()
-        main.app.dependency_overrides.clear()
-
-
-@pytest.mark.anyio
 async def test_upload_page_is_accessible(tmp_path: Path) -> None:
     client, session_factory = _build_test_client(tmp_path)
     course = _create_course(session_factory)

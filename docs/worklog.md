@@ -104,3 +104,14 @@
 - 未完成 / 待确认：本轮未拆 `course_plans`、`materials`、`outlines`、`drafts`、`exports` 测试；未抽 `conftest.py`；未修改业务代码、route、模板、数据库模型或测试夹具语义。
 - 风险点：新文件当前通过 `tests.test_course_plan_pages` 复用 helper 和 fixture，这是为了保持本轮最小侵入；后续继续拆分时需谨慎处理这些共享 helper，避免过早大规模整理 fixture 或改变 `dependency_overrides`、monkeypatch、临时目录覆盖语义。
 - 下一轮建议：如继续测试拆分专项，建议一轮只拆课程计划上传 / 预览 / 确认相关 route 测试，拆分前后继续对比 collect-only 数量和完整 pytest 结果。
+
+## 2026-06-07 16:25 +08｜测试文件拆分第二轮：课程入口 route
+
+- 日期时间：2026-06-07 16:25 +08
+- 本轮目标：从 `backend/tests/test_course_plan_pages.py` 中拆出明确属于课程入口 / 课程管理本身的测试到 `backend/tests/test_courses_routes.py`，保持测试语义和断言不变。
+- 已完成内容：定位 `test_course_plan_pages.py` 中 courses 相关命中；仅迁移 `test_courses_page_is_accessible`，因为其他 `/courses/...` 命中核心验证授课计划上传、正式课次、资料、知识主干或导学案链路，不属于本轮 courses / 课程管理本身范围；新文件复用原文件的 `_build_test_client`、`anyio_backend` 和 inline threadpool fixture。
+- 修改文件：`backend/tests/test_course_plan_pages.py`、`backend/tests/test_courses_routes.py`、`docs/worklog.md`。
+- 测试结果：拆分前已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest --collect-only -q`，结果 `157 tests collected in 1.42s`；拆分后已运行同一 collect-only 命令，结果 `157 tests collected in 1.05s`；已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `157 passed in 35.84s`；已运行 `git diff --check`，无输出。
+- 未完成 / 待确认：本轮未移动 `test_course_management.py` 或 `test_courses_v2_ui.py` 中已有课程创建、重命名、删除、V2 课程中心测试；未拆 `course_plans`、`materials`、`outlines`、`drafts`、`exports` 测试；未抽 `conftest.py`。
+- 风险点：`test_courses_routes.py` 当前仍通过 `tests.test_course_plan_pages` 复用测试客户端 helper，这是为了保持最小侵入；后续若继续拆课程计划相关测试，需要谨慎处理 helper 依赖，不要同时大改 fixture。
+- 下一轮建议：如继续测试拆分专项，可按审计建议拆课程计划上传 / 预览 / 确认相关 route 测试，继续保持一轮只拆一类测试，并对比 collect-only 数量和完整 pytest 结果。
