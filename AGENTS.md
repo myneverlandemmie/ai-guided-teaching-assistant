@@ -24,7 +24,9 @@
 - 每轮不得同时改 UI、后端、数据库和文档。
 
 ## 文档治理与手账
-- 每轮施工前应阅读 `docs/project_overview.md`、`docs/worklog.md` 最新记录和 `docs/qa_checklist.md`。
+- 每轮施工前应阅读 `docs/project_overview.md`、`docs/worklog.md` 当前状态摘要和最近记录，以及 `docs/qa_checklist.md`。
+- 如任务涉及已归档历史阶段，再阅读 `docs/worklogs/` 中对应归档记录。
+- `docs/worklog.md` 不作为永久流水账，应定期归档到 `docs/worklogs/`，避免上下文过长。
 - 每轮施工后应追加 `docs/worklog.md`，记录本轮目标、完成内容、修改文件、测试结果、未完成 / 待确认、风险点和下一轮建议。
 - 追加 `docs/worklog.md` 属于交接记录，不视为“同时修改功能文档”；但代码施工轮不得顺手修改 README、报告、prompt 文档或其他 `docs/` 文件，除非用户明确要求。
 
