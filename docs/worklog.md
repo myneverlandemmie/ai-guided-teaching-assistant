@@ -214,3 +214,14 @@
 - 未完成 / 待确认：本轮未拆 route 页面 / 保存测试，未拆 DeepSeek provider / fallback 测试，未拆 prompt 边界 / 安全过滤测试，未抽 `conftest.py`，未修改业务代码、route、模板、数据库模型或测试夹具语义。
 - 风险点：`test_outlines_model_config.py` 仍依赖环境变量 monkeypatch 和 `app.services.ai.deepseek_client.httpx.Client` 替换语义；后续继续拆 provider / fallback 测试时需要保护 `AI_PROVIDER`、`main.ai_provider.generate_knowledge_outline_with_provider`、`dependency_overrides.clear()` 和临时数据库语义。
 - 下一轮建议：如继续 outlines 二级拆分，建议拆 DeepSeek provider / mock fallback 相关测试到独立文件；route 页面 / 保存测试可继续留在 `test_outlines_routes.py` 作为最终 route 覆盖文件。
+
+## 2026-06-07 18:42 +08｜outlines 测试二级拆分第三轮：provider 与 fallback
+
+- 日期时间：2026-06-07 18:42 +08
+- 本轮目标：从 `backend/tests/test_outlines_routes.py` 中拆出 DeepSeek provider 调用、mock fallback、本地结构化草稿、生成失败安全处理和模型选择生成路径相关测试到 `backend/tests/test_outlines_provider_fallback.py`，保持测试语义和断言不变。
+- 已完成内容：迁移 9 个明确属于 provider / fallback / 生成集成范围的测试：`test_deepseek_generation_without_api_key_uses_local_structured_draft`、`test_deepseek_generation_uses_provider_and_saves_outline`、`test_generated_outline_is_sanitized_before_saving`、`test_deepseek_generation_error_does_not_save_outline_or_expose_key`、`test_invalid_ai_provider_shows_safe_error_without_outline`、`test_deepseek_generation_uses_flash_selected_model`、`test_can_generate_mock_knowledge_outline_without_materials`、`test_mock_knowledge_outline_uses_lesson_material_keywords`、`test_mock_knowledge_outline_filters_sensitive_material_information`；新文件仅复制必要 import；保留 route 页面 / 查看 / 保存、cross-origin route 安全、prompt 边界 / 安全过滤、模型配置 / timeout / HTTP error 测试在原有文件或已拆文件中。
+- 修改文件：`backend/tests/test_outlines_routes.py`、`backend/tests/test_outlines_provider_fallback.py`、`docs/worklog.md`。
+- 测试结果：拆分前已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest --collect-only -q`，结果 `157 tests collected in 1.54s`；拆分后已运行同一 collect-only 命令，结果 `157 tests collected in 1.56s`；已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `157 passed in 35.90s`；已运行 `git diff --check`，无输出。
+- 未完成 / 待确认：本轮未拆 route 页面 / 查看 / 保存测试，未拆 cross-origin route 安全测试，未拆 prompt 边界 / 安全过滤测试，未拆模型配置 / timeout / HTTP error 测试，未抽 `conftest.py`，未修改业务代码、route、模板、数据库模型或测试夹具语义。
+- 风险点：`test_outlines_provider_fallback.py` 仍依赖 `AI_PROVIDER`、`main.ai_provider.generate_knowledge_outline_with_provider`、session API Key 设置、`dependency_overrides.clear()`、临时 SQLite 数据库和 `_database_contains_text` 语义；本轮只做原样移动，后续如整理共享 helper 需单独拆轮并保持 `157 collected / 157 passed`。
+- 下一轮建议：如继续 outlines 二级拆分，`test_outlines_routes.py` 可保留为最终 route 页面 / 查看 / 保存和 cross-origin 安全覆盖文件；建议先做 outlines 二级拆分收口审计，确认文件规模和覆盖边界。
