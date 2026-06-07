@@ -203,3 +203,14 @@
 - 未完成 / 待确认：本轮未拆 DeepSeek provider / fallback 测试，未拆 route 页面 / 保存测试，未拆模型配置 / timeout / HTTP error 测试，未抽 `conftest.py`，未修改业务代码、route、模板、数据库模型或测试夹具语义。
 - 风险点：`test_outlines_prompt_boundaries.py` 包含 `AI_PROMPT_MATERIAL_MAX_CHARS` monkeypatch 测试，后续继续拆模型配置或 provider 测试时仍需保护环境变量 monkeypatch 和 `httpx.Client` 替换语义；`test_outlines_routes.py` 当前仍有 fallback 中的敏感信息过滤测试，因其核心属于 mock fallback 行为，本轮按边界要求保留未动。
 - 下一轮建议：如继续 outlines 二级拆分，建议拆模型配置 / timeout / HTTP error 相关同步测试到独立文件，继续保持一轮只拆一类测试，并对比 collect-only 数量和完整 pytest 结果。
+
+## 2026-06-07 18:33 +08｜outlines 测试二级拆分第二轮：模型配置与错误边界
+
+- 日期时间：2026-06-07 18:33 +08
+- 本轮目标：从 `backend/tests/test_outlines_routes.py` 中拆出 DeepSeek 模型配置、允许模型列表、默认模型、timeout fallback 和 HTTP error 边界相关测试到 `backend/tests/test_outlines_model_config.py`，保持测试语义和断言不变。
+- 已完成内容：迁移 4 个明确属于模型配置 / timeout / HTTP error 范围的测试：`test_deepseek_model_config_parses_allowed_models`、`test_deepseek_model_config_falls_back_when_env_is_invalid`、`test_deepseek_config_accepts_v4_models_and_invalid_timeout_falls_back`、`test_deepseek_http_errors_do_not_keep_exception_chain_or_key`；新文件仅复制必要 import；保留 route 页面 / 保存、DeepSeek provider、mock fallback 和 prompt 边界测试在原有文件中。
+- 修改文件：`backend/tests/test_outlines_routes.py`、`backend/tests/test_outlines_model_config.py`、`docs/worklog.md`。
+- 测试结果：拆分前已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest --collect-only -q`，结果 `157 tests collected in 1.50s`；拆分后已运行同一 collect-only 命令，结果 `157 tests collected in 0.83s`；已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `157 passed in 36.17s`；已运行 `git diff --check`，无输出。
+- 未完成 / 待确认：本轮未拆 route 页面 / 保存测试，未拆 DeepSeek provider / fallback 测试，未拆 prompt 边界 / 安全过滤测试，未抽 `conftest.py`，未修改业务代码、route、模板、数据库模型或测试夹具语义。
+- 风险点：`test_outlines_model_config.py` 仍依赖环境变量 monkeypatch 和 `app.services.ai.deepseek_client.httpx.Client` 替换语义；后续继续拆 provider / fallback 测试时需要保护 `AI_PROVIDER`、`main.ai_provider.generate_knowledge_outline_with_provider`、`dependency_overrides.clear()` 和临时数据库语义。
+- 下一轮建议：如继续 outlines 二级拆分，建议拆 DeepSeek provider / mock fallback 相关测试到独立文件；route 页面 / 保存测试可继续留在 `test_outlines_routes.py` 作为最终 route 覆盖文件。
