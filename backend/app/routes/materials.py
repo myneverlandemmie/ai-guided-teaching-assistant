@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from os import SEEK_END, SEEK_SET
 from pathlib import Path
 from uuid import uuid4
 
@@ -28,6 +29,34 @@ GetLatestKnowledgeOutline = Callable[[Session, int], KnowledgeOutline | None]
 GetLessonDraftByType = Callable[[Session, int, str], LessonDraft | None]
 GetUploadDir = Callable[[], Path]
 MaterialCategoryLabel = Callable[[LessonMaterial], str]
+
+MAX_LESSON_MATERIAL_UPLOAD_BYTES = 50 * 1024 * 1024
+LESSON_MATERIAL_UPLOAD_TOO_LARGE_MESSAGE = "文件过大，请拆分资料后上传。"
+UPLOAD_SIZE_CHECK_CHUNK_BYTES = 1024 * 1024
+
+
+async def _is_lesson_material_upload_too_large(uploaded_file: UploadFile) -> bool:
+    """检查上传大小，并把文件指针恢复到开头。"""
+
+    try:
+        uploaded_file.file.seek(0, SEEK_END)
+        size = uploaded_file.file.tell()
+        uploaded_file.file.seek(0, SEEK_SET)
+        await uploaded_file.seek(0)
+        return size > MAX_LESSON_MATERIAL_UPLOAD_BYTES
+    except (AttributeError, OSError):
+        total_size = 0
+        await uploaded_file.seek(0)
+        while True:
+            chunk = await uploaded_file.read(UPLOAD_SIZE_CHECK_CHUNK_BYTES)
+            if not chunk:
+                break
+            total_size += len(chunk)
+            if total_size > MAX_LESSON_MATERIAL_UPLOAD_BYTES:
+                await uploaded_file.seek(0)
+                return True
+        await uploaded_file.seek(0)
+        return False
 
 
 def create_materials_router(
@@ -98,7 +127,34 @@ def create_materials_router(
             "lesson_status_labels": lesson_status_labels,
             "knowledge_outline": knowledge_outline,
             "knowledge_outline_status_labels": knowledge_outline_status_labels,
+            "teaching_prep_reference": get_lesson_draft_by_type(
+                db,
+                lesson.id,
+                TEACHING_PREP_REFERENCE_DRAFT_TYPE,
+            ),
+            "draft_status_labels": lesson_draft_status_labels,
         }
+
+    def _lesson_material_error_response(
+        request: Request,
+        db: Session,
+        lesson: Lesson,
+        error_message: str,
+        redirect_to: str,
+    ) -> HTMLResponse:
+        """按来源页面渲染课次资料错误提示。"""
+
+        template_name = (
+            "lesson_materials_outline_v2.html"
+            if redirect_to.split("?", 1)[0] == f"/ui-v2/lessons/{lesson.id}/materials-outline"
+            else "lesson_detail.html"
+        )
+        return templates.TemplateResponse(
+            request,
+            template_name,
+            _lesson_material_context(db, lesson, error_message),
+            status_code=400,
+        )
 
     @router.get("/ui-v2/lessons/{lesson_id}/materials-outline", response_class=HTMLResponse)
     async def show_lesson_materials_outline_v2(
@@ -168,11 +224,12 @@ def create_materials_router(
         if is_pasted_text:
             material_content = content.strip()
             if not material_content:
-                return templates.TemplateResponse(
+                return _lesson_material_error_response(
                     request,
-                    "lesson_detail.html",
-                    _lesson_material_context(db, lesson, "请选择“粘贴文本”并填写文本内容。"),
-                    status_code=400,
+                    db,
+                    lesson,
+                    "请选择“粘贴文本”并填写文本内容。",
+                    redirect_to,
                 )
             material = LessonMaterial(
                 lesson_id=lesson.id,
@@ -186,11 +243,12 @@ def create_materials_router(
             return RedirectResponse(url=redirect_to, status_code=303)
 
         if not uploaded_files:
-            return templates.TemplateResponse(
+            return _lesson_material_error_response(
                 request,
-                "lesson_detail.html",
-                _lesson_material_context(db, lesson, "请选择一个或多个 .txt / .md / .docx / .pptx / .xlsx 文件；暂不支持 .xls。"),
-                status_code=400,
+                db,
+                lesson,
+                "请选择一个或多个 .txt / .md / .docx / .pptx / .xlsx 文件；暂不支持 .xls。",
+                redirect_to,
             )
 
         lesson_material_upload_dir = get_lesson_material_upload_dir()
@@ -206,6 +264,9 @@ def create_materials_router(
                 continue
             if suffix not in SUPPORTED_MATERIAL_SUFFIXES:
                 errors.append(f"{safe_filename}：暂不支持该文件类型。请上传 .txt / .md / .docx / .pptx / .xlsx；不支持 .xls、PDF、图片、扫描件和旧版 .doc / .ppt。")
+                continue
+            if await _is_lesson_material_upload_too_large(uploaded_file):
+                errors.append(f"{safe_filename}：{LESSON_MATERIAL_UPLOAD_TOO_LARGE_MESSAGE}")
                 continue
 
             saved_path = lesson_material_upload_dir / f"{uuid4().hex}-{safe_filename}"
@@ -235,11 +296,12 @@ def create_materials_router(
             message = "；".join(errors)
             if created_count:
                 message = f"已成功添加 {created_count} 份资料。以下文件未能保存：{message}"
-            return templates.TemplateResponse(
+            return _lesson_material_error_response(
                 request,
-                "lesson_detail.html",
-                _lesson_material_context(db, lesson, message),
-                status_code=400,
+                db,
+                lesson,
+                message,
+                redirect_to,
             )
 
         return RedirectResponse(url=redirect_to, status_code=303)

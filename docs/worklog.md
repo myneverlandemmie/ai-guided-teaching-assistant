@@ -71,3 +71,15 @@
 - 未完成 / 待确认：本轮未修改业务代码、测试文件、模板、静态资源、README、数据库、上传文件或导出文件；下一步等待用户审阅审计报告后再决定 Phase 2.1 施工范围。
 - 风险点：当前审计判断指出上传文件大小、知识主干 DeepSeek 失败 fallback、备课建议 fallback 提示、非法 `return_to` 教师提示和导出下载失败提示需要后续小步施工验证；本轮未验证人工页面流程。
 - 下一轮建议：优先从 Phase 2.1 上传格式与文件大小提示开始，先解决 P0 上传格式文案统一、P1 文件过大和 V2 上传错误回到 V2 页面的问题。
+
+### 2026-06-07 20:56 +08｜Phase 2.1a：课次资料上传错误提示收束
+
+- 日期时间：2026-06-07 20:56 +08
+- 本轮目标：只处理课次资料上传错误提示收束，保留 `.txt` / `.md` / `.docx` / `.pptx` / `.xlsx` 支持范围，增加课次资料上传大小上限，超限时显示“文件过大，请拆分资料后上传。”，并保证从 V2 资料整理页上传失败时仍停留在 V2 页面。
+- 本轮修改范围：`backend/app/routes/materials.py`、`backend/app/templates/lesson_materials_outline_v2.html`、`backend/tests/test_materials_routes.py`、`docs/worklog.md`。
+- 已完成内容：在 `materials.py` 中新增 `MAX_LESSON_MATERIAL_UPLOAD_BYTES = 50 * 1024 * 1024`，通过 `seek/tell` 在读取正文前检查课次资料上传大小，无法直接取大小时按 1 MiB 分块检查；超限文件不写入数据库、不保存上传文件；保留 `.xls` 和其他不支持格式的中文细分提示；新增 route 内部错误响应 helper，按现有 V2 `return_to` 渲染 `lesson_materials_outline_v2.html`，legacy 来源继续渲染 `lesson_detail.html`；V2 模板复用 `error_message` 显示错误。
+- 新增或调整测试：加强不支持格式测试，断言非 500、支持格式范围和无资料记录；新增超限文件测试，monkeypatch 小上限后确认中文提示、无数据库记录、无失败上传文件；新增 V2 上传失败测试，确认页面仍为 `lesson_materials_outline_v2.html` 且显示课程、课次和错误提示；保留既有 `.txt` / `.md` / `.docx` / `.pptx` / `.xlsx` 成功路径测试。
+- 测试结果：施工前已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest --collect-only -q`，结果 `157 tests collected in 1.31s`；施工前已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `157 passed in 32.32s`；施工后已运行 materials 相关测试 `PYTHONPATH=. ../.venv/bin/pytest -q tests/test_materials_routes.py tests/test_lesson_materials_outline_v2_ui.py tests/test_lesson_materials_xlsx.py`，结果 `26 passed in 10.37s`；施工后已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest --collect-only -q`，结果 `159 tests collected in 0.71s`；已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `159 passed in 32.81s`；已运行 `git diff --check`，无输出。
+- 未完成 / 待确认：本轮未处理授课计划上传大小限制、`.xlsx` 空表文案、AI Key 缺失提示、DeepSeek fallback、备课参考建议 fallback、`return_to` 公共 helper、学习通导出失败或 Markdown 下载失败；未做浏览器人工页面验收；未 commit、未 push。
+- 风险点：50 MiB 上限适合普通文本、Word、PPT 和 Excel 教学材料，但实际学校课件若包含大量图片或视频截图，可能需要教师拆分后上传；V2 错误显示仅做最小模板补充，建议人工从 V2 上传 `.pdf` 和超限文件确认页面体验。
+- 下一轮建议：Phase 2.1b 单独处理授课计划上传大小限制，继续避免混入 AI fallback、导出下载和公共异常系统。

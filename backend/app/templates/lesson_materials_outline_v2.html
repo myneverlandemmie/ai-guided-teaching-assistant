@@ -81,6 +81,9 @@
       </div>
       <p>支持文件上传和粘贴文本。系统提取文本后用于知识主干生成。</p>
     </div>
+    {% if error_message %}
+      <p class="error">{{ error_message }}</p>
+    {% endif %}
 
     <div class="materials-upload-grid-v2">
       <article class="materials-input-card-v2">

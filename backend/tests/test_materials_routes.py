@@ -8,6 +8,7 @@ from sqlalchemy import select
 from app import main
 from app.models.course_plan import PlannedLesson
 from app.models.lesson import LessonMaterial
+from app.routes import materials as materials_routes
 from tests.support.course_plan_helpers import (
     _build_test_client,
     _create_course,
@@ -179,8 +180,88 @@ async def test_unsupported_lesson_material_file_type_shows_hint(tmp_path: Path) 
         )
 
         assert response.status_code == 400
+        assert response.status_code != 500
         assert "暂不支持该文件类型" in response.text
+        assert "txt / md / docx / pptx / xlsx" in response.text
         assert "暂不支持 xls、PDF、图片或扫描件" in response.text
+        with session_factory() as session:
+            assert session.scalars(select(LessonMaterial)).all() == []
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_oversized_lesson_material_file_shows_hint_without_saving(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(materials_routes, "MAX_LESSON_MATERIAL_UPLOAD_BYTES", 8)
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _upload_sample_plan(client, course)
+        with session_factory() as session:
+            selected_id = session.scalar(select(PlannedLesson.id).order_by(PlannedLesson.id))
+            assert selected_id is not None
+        await client.post(
+            "/course-plan-uploads/1/confirm",
+            data={"planned_lesson_ids": str(selected_id)},
+            follow_redirects=False,
+        )
+
+        response = await client.post(
+            "/lessons/1/materials",
+            data={"title": "超限资料", "material_type": "supplementary", "content": ""},
+            files={"files": ("too-large.txt", b"012345678", "text/plain")},
+        )
+
+        assert response.status_code == 400
+        assert response.status_code != 500
+        assert "文件过大，请拆分资料后上传。" in response.text
+        with session_factory() as session:
+            assert session.scalars(select(LessonMaterial)).all() == []
+        upload_dir = tmp_path / "lesson-materials"
+        assert not upload_dir.exists() or list(upload_dir.iterdir()) == []
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_v2_material_upload_error_stays_on_materials_outline_page(tmp_path: Path) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _upload_sample_plan(client, course)
+        with session_factory() as session:
+            selected_id = session.scalar(select(PlannedLesson.id).order_by(PlannedLesson.id))
+            assert selected_id is not None
+        await client.post(
+            "/course-plan-uploads/1/confirm",
+            data={"planned_lesson_ids": str(selected_id)},
+            follow_redirects=False,
+        )
+
+        response = await client.post(
+            "/lessons/1/materials",
+            data={
+                "title": "PDF 材料",
+                "input_mode": "file_upload",
+                "material_category": "supplementary",
+                "return_to": "/ui-v2/lessons/1/materials-outline",
+            },
+            files={"files": ("lesson.pdf", b"fake pdf", "application/pdf")},
+        )
+
+        assert response.status_code == 400
+        assert response.status_code != 500
+        assert "lesson-materials-v2" in response.text
+        assert "课程资料整理" in response.text
+        assert "数据库应用与数据分析" in response.text
+        assert "上传课次资料" in response.text
+        assert "暂不支持该文件类型" in response.text
+        assert "课次详情" not in response.text
         with session_factory() as session:
             assert session.scalars(select(LessonMaterial)).all() == []
     finally:
