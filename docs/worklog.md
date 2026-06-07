@@ -60,3 +60,14 @@
 - 未完成 / 待确认：本轮未抽 `conftest.py`；未修改业务代码、route、模板、数据库模型、断言、fixture 作用域、monkeypatch 语义或 dependency override 语义；未做人工页面验收。
 - 风险点：`PROJECT_ROOT` 在新 helper 模块中需从 `parents[3]` 计算仓库根目录，以保持 `SAMPLE_PLAN` 指向原数据文件；后续如移动 helper 文件路径，需要同步确认该路径计算。
 - 下一轮建议：如继续测试治理，可单独审计是否还有局部 `_build_test_client` 重复实现；产品节奏优先时进入 Phase 2 中文错误提示与异常处理统一。
+
+### 2026-06-07 20:25 +08｜Phase 2 错误提示与异常处理统一：只读审计
+
+- 日期时间：2026-06-07 20:25 +08
+- 本轮目标：启动 Phase 2 中文友好错误提示与异常处理统一，先做第一轮只读审计，明确当前错误提示、fallback、上传、return_to、导出下载和日志隐私边界现状，不进入施工。
+- 已完成内容：阅读 `docs/project_overview.md`、`docs/worklog.md` 当前状态和 `docs/qa_checklist.md`；检查 `backend/app/main.py`、相关 route、service、template、static 范围；搜索 `HTTPException`、`raise`、`except`、`return_to`、`message`、`error`、`DeepSeek`、`fallback`、上传格式和导出下载路径；生成 `docs/audit/phase2_error_handling_audit.md`。
+- 修改文件：`docs/audit/phase2_error_handling_audit.md`、`docs/worklog.md`。
+- 测试结果：已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `157 passed in 32.00s`。
+- 未完成 / 待确认：本轮未修改业务代码、测试文件、模板、静态资源、README、数据库、上传文件或导出文件；下一步等待用户审阅审计报告后再决定 Phase 2.1 施工范围。
+- 风险点：当前审计判断指出上传文件大小、知识主干 DeepSeek 失败 fallback、备课建议 fallback 提示、非法 `return_to` 教师提示和导出下载失败提示需要后续小步施工验证；本轮未验证人工页面流程。
+- 下一轮建议：优先从 Phase 2.1 上传格式与文件大小提示开始，先解决 P0 上传格式文案统一、P1 文件过大和 V2 上传错误回到 V2 页面的问题。
