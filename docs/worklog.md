@@ -83,3 +83,15 @@
 - 未完成 / 待确认：本轮未处理授课计划上传大小限制、`.xlsx` 空表文案、AI Key 缺失提示、DeepSeek fallback、备课参考建议 fallback、`return_to` 公共 helper、学习通导出失败或 Markdown 下载失败；未做浏览器人工页面验收；未 commit、未 push。
 - 风险点：50 MiB 上限适合普通文本、Word、PPT 和 Excel 教学材料，但实际学校课件若包含大量图片或视频截图，可能需要教师拆分后上传；V2 错误显示仅做最小模板补充，建议人工从 V2 上传 `.pdf` 和超限文件确认页面体验。
 - 下一轮建议：Phase 2.1b 单独处理授课计划上传大小限制，继续避免混入 AI fallback、导出下载和公共异常系统。
+
+### 2026-06-07 21:33 +08｜Phase 2.2：课次资料 XLSX 空表提示收束
+
+- 日期时间：2026-06-07 21:33 +08
+- 本轮目标：只处理课次资料上传中 `.xlsx` 空表或未读取到有效文本时的中文友好提示，目标文案为“表格内容为空或未读取到有效文本，请检查后重新上传。”。
+- 本轮修改范围：`backend/app/services/lesson_materials/document_text_extractor.py`、`backend/tests/test_lesson_materials_xlsx.py`、`docs/worklog.md`。
+- 已完成内容：在 `.xlsx` 文本提取服务中新增 `EMPTY_XLSX_TEXT_MESSAGE` 常量，并将没有有效表格文本时的 `LessonMaterialExtractionError` 文案统一为目标文案；保持非空 `.xlsx` 提取、`.txt/.md/.docx/.pptx` 处理、不支持格式提示和 Phase 2.1a 上传大小限制逻辑不变；route 继续捕获 `LessonMaterialExtractionError`、带文件名前缀展示错误并删除失败上传文件。
+- 新增或调整测试：在 `test_lesson_materials_xlsx.py` 中新增空 workbook 上传测试、只有空白字符单元格的 `.xlsx` 上传测试，并增强非空 `.xlsx` 成功路径断言，确认非空资料不出现空表提示；空白字符 `.xlsx` 测试同时覆盖 V2 页面错误回显不退回 legacy 页面。
+- 测试结果：施工前已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest --collect-only -q`，结果 `159 tests collected in 1.34s`；施工前已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `159 passed in 33.45s`；施工后已运行 xlsx / materials 相关测试 `PYTHONPATH=. ../.venv/bin/pytest -q tests/test_lesson_materials_xlsx.py tests/test_materials_routes.py tests/test_lesson_materials_outline_v2_ui.py`，结果 `28 passed in 11.03s`；施工后已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest --collect-only -q`，结果 `161 tests collected in 0.76s`；已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `161 passed in 33.72s`；已运行 `git diff --check`，无输出。
+- 未完成 / 待确认：本轮未处理授课计划 `.xlsx` 上传或空表、AI Key 缺失提示、DeepSeek fallback、备课参考建议 fallback、`return_to` 公共 helper、学习通导出失败、Markdown 下载失败、DOCX 下载或 DOCX 导出；未做浏览器人工页面验收；未 commit、未 push。
+- 风险点：当前空表判断依赖 openpyxl 读取出的单元格值经 `str(value).strip()` 后是否为空，能覆盖默认空 sheet、全空单元格和空白字符单元格；建议人工从 V2 页面上传空 `.xlsx` 再确认页面体验和提示位置。
+- 下一轮建议：按 Phase 2 审计计划继续小步处理，优先在用户确认后进入 AI Key 缺失与 DeepSeek fallback 提示，或单独安排授课计划上传大小限制 Phase 2.1b。

@@ -31,6 +31,7 @@ except ImportError:  # pragma: no cover - 缺依赖时由调用方显示错误
 
 SUPPORTED_MATERIAL_SUFFIXES = {".txt", ".md", ".docx", ".pptx", ".xlsx"}
 MAX_XLSX_EXTRACTED_CHARS = 120_000
+EMPTY_XLSX_TEXT_MESSAGE = "表格内容为空或未读取到有效文本，请检查后重新上传。"
 FOOTER_PATTERNS = (
     re.compile(r"©\s*Microsoft Corporation", re.IGNORECASE),
     re.compile(r"All rights reserved", re.IGNORECASE),
@@ -274,7 +275,7 @@ def extract_text_from_xlsx(file_path: str | Path) -> str:
         workbook.close()
 
     if not sheet_blocks:
-        raise LessonMaterialExtractionError("未从 .xlsx 中提取到可用文本，请复制表格内容粘贴到文本框。")
+        raise LessonMaterialExtractionError(EMPTY_XLSX_TEXT_MESSAGE)
 
     text = "# XLSX 表格资料提取\n\n" + "\n\n".join(sheet_blocks)
     return _limit_xlsx_text(clean_extracted_text(text))

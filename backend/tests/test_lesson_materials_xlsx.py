@@ -11,6 +11,7 @@ from app import main
 from app.db.base import create_database_tables
 from app.models.course import Course
 from app.models.lesson import Lesson, LessonMaterial
+from app.services.lesson_materials.document_text_extractor import EMPTY_XLSX_TEXT_MESSAGE
 
 
 @pytest.fixture
@@ -77,6 +78,20 @@ def _create_sample_xlsx(path: Path) -> None:
     workbook.save(path)
 
 
+def _create_empty_xlsx(path: Path) -> None:
+    workbook = Workbook()
+    workbook.save(path)
+
+
+def _create_whitespace_xlsx(path: Path) -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "空白内容"
+    sheet["A1"] = "   "
+    sheet["B2"] = "\n\t  "
+    workbook.save(path)
+
+
 @pytest.mark.anyio
 async def test_can_upload_xlsx_lesson_material_and_extract_sheet_text(tmp_path: Path) -> None:
     client, session_factory = _build_test_client(tmp_path)
@@ -111,11 +126,87 @@ async def test_can_upload_xlsx_lesson_material_and_extract_sheet_text(tmp_path: 
             assert "张三 88 已提交" in material.content
             assert "李四 76 需订正" in material.content
             assert "连接传感器" in material.content
+            assert EMPTY_XLSX_TEXT_MESSAGE not in material.content
 
         page_response = await client.get(f"/ui-v2/lessons/{lesson_id}/materials-outline")
         assert page_response.status_code == 200
         assert "资料类别：评价表 / 记录表" in page_response.text
         assert "records.xlsx" in page_response.text
+        assert EMPTY_XLSX_TEXT_MESSAGE not in page_response.text
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_empty_xlsx_lesson_material_upload_shows_friendly_message(tmp_path: Path) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    lesson_id = _create_lesson(session_factory)
+    xlsx_path = tmp_path / "empty.xlsx"
+    _create_empty_xlsx(xlsx_path)
+    try:
+        response = await client.post(
+            f"/lessons/{lesson_id}/materials",
+            data={"title": "空表", "material_type": "evaluation_sheet", "content": ""},
+            files={
+                "files": (
+                    "empty.xlsx",
+                    xlsx_path.read_bytes(),
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
+
+        assert response.status_code == 400
+        assert response.status_code != 500
+        assert f"empty.xlsx：{EMPTY_XLSX_TEXT_MESSAGE}" in response.text
+        assert str(tmp_path) not in response.text
+        with session_factory() as session:
+            assert session.scalars(select(LessonMaterial)).all() == []
+        upload_dir = tmp_path / "lesson-materials"
+        assert not upload_dir.exists() or list(upload_dir.iterdir()) == []
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_whitespace_xlsx_lesson_material_error_stays_on_v2_page(tmp_path: Path) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    lesson_id = _create_lesson(session_factory)
+    xlsx_path = tmp_path / "blank-cells.xlsx"
+    _create_whitespace_xlsx(xlsx_path)
+    return_to = f"/ui-v2/lessons/{lesson_id}/materials-outline"
+    try:
+        response = await client.post(
+            f"/lessons/{lesson_id}/materials",
+            data={
+                "title": "空白表格",
+                "input_mode": "file_upload",
+                "material_category": "evaluation_sheet",
+                "return_to": return_to,
+            },
+            files={
+                "files": (
+                    "blank-cells.xlsx",
+                    xlsx_path.read_bytes(),
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
+
+        assert response.status_code == 400
+        assert response.status_code != 500
+        assert "lesson-materials-v2" in response.text
+        assert "课程资料整理" in response.text
+        assert "测试课程" in response.text
+        assert "数据记录表分析" in response.text
+        assert f"blank-cells.xlsx：{EMPTY_XLSX_TEXT_MESSAGE}" in response.text
+        assert "课次详情" not in response.text
+        with session_factory() as session:
+            assert session.scalars(select(LessonMaterial)).all() == []
+        upload_dir = tmp_path / "lesson-materials"
+        assert not upload_dir.exists() or list(upload_dir.iterdir()) == []
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
@@ -140,4 +231,3 @@ async def test_xls_lesson_material_upload_is_rejected_with_friendly_message(tmp_
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
-
