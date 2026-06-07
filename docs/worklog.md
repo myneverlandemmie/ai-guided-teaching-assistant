@@ -148,3 +148,14 @@
 - 未完成 / 待确认：本轮未拆 outlines、drafts、exports 测试；未抽 `conftest.py`；未修改业务代码、route、模板、数据库模型或测试夹具语义。
 - 风险点：`test_materials_routes.py` 当前仍通过 `tests.test_course_plan_pages` 复用 `_build_test_client`、`_create_course`、`_upload_sample_plan` 和 fixture，这是为了保持本轮最小侵入；后续继续拆 outlines / drafts / exports 时仍需谨慎处理共享 helper，避免过早大规模整理 fixture 或改变临时目录、dependency override、monkeypatch 语义。
 - 下一轮建议：如继续测试拆分专项，建议拆 outlines / 知识主干相关 route 测试，继续保持一轮只拆一类测试，并对比 collect-only 数量和完整 pytest 结果。
+
+## 2026-06-07 17:27 +08｜测试文件拆分第六轮：知识主干 route
+
+- 日期时间：2026-06-07 17:27 +08
+- 本轮目标：从 `backend/tests/test_course_plan_pages.py` 中拆出知识主干生成、查看、保存、DeepSeek / fallback、行政信息过滤、prompt 边界和知识主干入口展示相关测试到 `backend/tests/test_outlines_routes.py`，保持测试语义和断言不变。
+- 已完成内容：迁移 21 个明确属于 outlines 范围的测试，覆盖知识主干生成 route、跨站生成拒绝、无 API Key 本地结构化草稿、DeepSeek Provider 调用与模型选择、生成结果行政信息过滤、生成失败不保存且不泄露 Key、无效 Provider 安全错误、mock 知识主干 fallback、知识主干页面查看与教师保存、生成提示与禁用脚本、知识主干 prompt 固定章节 / 声明 / 材料长度限制 / 敏感信息过滤，以及旧课次详情页中的知识主干入口；保留核心验证草稿、导学案和导出的测试在原文件中。
+- 修改文件：`backend/tests/test_course_plan_pages.py`、`backend/tests/test_outlines_routes.py`、`docs/worklog.md`。
+- 测试结果：拆分前已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest --collect-only -q`，结果 `157 tests collected in 1.36s`；拆分后已运行同一 collect-only 命令，结果 `157 tests collected in 1.57s`；已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `157 passed in 33.72s`；已运行 `git diff --check`，无输出。
+- 未完成 / 待确认：本轮未拆 drafts、exports 测试；未抽 `conftest.py`；未修改业务代码、route、模板、数据库模型或测试夹具语义。
+- 风险点：`test_outlines_routes.py` 当前仍通过 `tests.test_course_plan_pages` 复用 `_build_test_client`、`_create_course`、`_upload_sample_plan`、`_database_contains_text`、同源 headers 和 fixture，这是为了保持本轮最小侵入；后续拆 drafts / exports 时仍需谨慎处理共享 helper，避免过早大规模整理 fixture 或改变 dependency override、monkeypatch、临时目录覆盖语义。
+- 下一轮建议：如继续测试拆分专项，建议拆 drafts / 草稿、前测、导学案相关 route 测试，继续保持一轮只拆一类测试，并对比 collect-only 数量和完整 pytest 结果。
