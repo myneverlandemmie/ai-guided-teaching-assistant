@@ -93,3 +93,14 @@
 - 未完成 / 待确认：本轮未拆分任何测试文件，未修改 fixture、monkeypatch、dependency override 或业务代码；后续是否按建议先拆 `ai_settings` / session 相关测试需人工确认。
 - 风险点：`test_course_plan_pages.py` 规模明显偏大，且集中包含 session、API Key、课程计划、导出下载、前测 / 导学案等多类高风险覆盖；拆分时容易出现测试数量不变但断言语义弱化，需逐轮对比 collect-only 数量和完整 pytest 结果。
 - 下一轮建议：如进入测试拆分专项，第一轮建议仅从 `test_course_plan_pages.py` 中拆出 `ai_settings` / session 相关测试到独立测试文件，不同时拆 fixture、不修改业务代码、不删除或弱化断言。
+
+## 2026-06-07 16:16 +08｜测试文件拆分第一轮：AI 设置与 session
+
+- 日期时间：2026-06-07 16:16 +08
+- 本轮目标：从 `backend/tests/test_course_plan_pages.py` 中拆出 AI 设置、会话级 API Key、模型选择、`session_key_store`、`/ai/settings` 相关测试到 `backend/tests/test_ai_settings_routes.py`，保持测试语义和断言不变。
+- 已完成内容：迁移 11 个明确属于 AI 设置 / session 范围的测试；新文件复用原文件的 `_build_test_client`、`_database_contains_text`、同源 headers、`anyio_backend` 和 inline threadpool fixture；原文件保留知识主干、DeepSeek 生成、课程计划、资料、草稿和导出相关测试，未移动非本轮范围测试。
+- 修改文件：`backend/tests/test_course_plan_pages.py`、`backend/tests/test_ai_settings_routes.py`、`docs/worklog.md`。
+- 测试结果：拆分前已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest --collect-only -q`，结果 `157 tests collected in 1.44s`；拆分后已运行同一 collect-only 命令，结果 `157 tests collected in 1.75s`；已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `157 passed in 35.79s`；已运行 `git diff --check`，无输出。
+- 未完成 / 待确认：本轮未拆 `course_plans`、`materials`、`outlines`、`drafts`、`exports` 测试；未抽 `conftest.py`；未修改业务代码、route、模板、数据库模型或测试夹具语义。
+- 风险点：新文件当前通过 `tests.test_course_plan_pages` 复用 helper 和 fixture，这是为了保持本轮最小侵入；后续继续拆分时需谨慎处理这些共享 helper，避免过早大规模整理 fixture 或改变 `dependency_overrides`、monkeypatch、临时目录覆盖语义。
+- 下一轮建议：如继续测试拆分专项，建议一轮只拆课程计划上传 / 预览 / 确认相关 route 测试，拆分前后继续对比 collect-only 数量和完整 pytest 结果。
