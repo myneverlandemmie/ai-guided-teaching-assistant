@@ -114,6 +114,8 @@ async def test_default_lesson_draft_generation_creates_probe_and_low_guide(tmp_p
         assert "AI 正在生成，请稍候" in page_response.text
         assert "请勿重复点击" in page_response.text
         assert "本地结构化草稿" in page_response.text
+        assert "下载 DOCX" in page_response.text
+        assert "/download-docx" in page_response.text
         assert "rule_based" not in page_response.text
         assert "rule-based" not in page_response.text
         assert "mock" not in page_response.text

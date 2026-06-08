@@ -184,7 +184,12 @@
                     状态：{{ draft_status_labels.get(draft.status, draft.status) }} ｜ 生成方式：{% if draft.generated_by in ["rule_based", "local-structured-draft"] %}本地结构化草稿{% else %}AI 生成草稿（{{ draft.generated_by }}）{% endif %}
                   </p>
                 </div>
-                <a class="v2-action-button v2-action-button--secondary" href="/lessons/{{ lesson.id }}/drafts/{{ draft.id }}/download-md">下载 Markdown</a>
+                <div class="prep-reference-actions-v2">
+                  <a class="v2-action-button v2-action-button--secondary" href="/lessons/{{ lesson.id }}/drafts/{{ draft.id }}/download-md">下载 Markdown</a>
+                  {% if draft.content|trim %}
+                    <a class="v2-action-button v2-action-button--secondary" href="/lessons/{{ lesson.id }}/drafts/{{ draft.id }}/download-docx">下载 DOCX</a>
+                  {% endif %}
+                </div>
               </div>
               <form class="editor-area" method="post" action="/lessons/{{ lesson.id }}/drafts/{{ draft.id }}/save">
                 <input type="hidden" name="return_to" value="{{ v2_return_to }}">

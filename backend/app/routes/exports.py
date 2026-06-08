@@ -13,6 +13,12 @@ from app.db.session import get_db
 from app.models.lesson import Lesson
 from app.models.lesson_draft import LessonDraft
 from app.services.ai.lesson_draft_service import write_chaoxing_template_xlsx
+from app.services.exports.docx_exporter import (
+    DOCX_EXPORT_ERROR_MESSAGE,
+    DOCX_MIME_TYPE,
+    DocxExportError,
+    build_lesson_draft_docx,
+)
 
 SanitizeNextPath = Callable[[str | None], str | None]
 SafeExportPart = Callable[[str | None, str], str]
@@ -104,4 +110,49 @@ def create_exports_router(
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
+    @router.get("/lessons/{lesson_id}/drafts/{draft_id}/download-docx")
+    async def download_lesson_draft_docx(
+        lesson_id: int,
+        draft_id: int,
+        db: Session = Depends(get_db),
+    ) -> Response:
+        """将当前导学案或备课参考建议草稿下载为基础 DOCX。"""
+
+        lesson = db.get(Lesson, lesson_id)
+        draft = db.get(LessonDraft, draft_id)
+        if lesson is None or draft is None or draft.lesson_id != lesson_id:
+            return _friendly_export_error("导学草稿不存在", 404)
+        downloadable_types = {"guide_low", "guide_mid", "guide_high", teaching_prep_reference_draft_type}
+        if draft.draft_type not in downloadable_types:
+            return _friendly_export_error("只有导学案或备课参考建议草稿可以下载 DOCX", 400)
+
+        filename_part = lesson_draft_download_name_parts.get(draft.draft_type, "learning_draft")
+        lesson_part = _ascii_export_part(safe_export_part(lesson.lesson_code, str(lesson.id)), str(lesson.id))
+        filename = f"lesson_{lesson.id}_{lesson_part}_{filename_part}.docx"
+        try:
+            docx_content = build_lesson_draft_docx(lesson, draft)
+            guide_export_dir = get_guide_export_dir()
+            guide_export_dir.mkdir(parents=True, exist_ok=True)
+            output_path = guide_export_dir / filename
+            output_path.write_bytes(docx_content)
+        except DocxExportError:
+            return _friendly_export_error(DOCX_EXPORT_ERROR_MESSAGE, 400)
+        except Exception:
+            return _friendly_export_error(DOCX_EXPORT_ERROR_MESSAGE, 503)
+
+        return Response(
+            content=docx_content,
+            media_type=DOCX_MIME_TYPE,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
     return router
+
+
+def _friendly_export_error(message: str, status_code: int) -> Response:
+    return Response(content=message, status_code=status_code, media_type="text/plain; charset=utf-8")
+
+
+def _ascii_export_part(value: str, fallback: str) -> str:
+    cleaned = "".join(char for char in value if char.isascii() and (char.isalnum() or char in {"-", "_"}))
+    return cleaned or fallback

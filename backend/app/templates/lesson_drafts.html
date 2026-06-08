@@ -188,6 +188,9 @@
                     </form>
                   {% elif draft.draft_type in ["guide_low", "guide_mid", "guide_high"] %}
                     <a class="button-link button-secondary" href="/lessons/{{ lesson.id }}/drafts/{{ draft.id }}/download-md">下载 Markdown</a>
+                    {% if draft.content|trim %}
+                      <a class="button-link button-secondary" href="/lessons/{{ lesson.id }}/drafts/{{ draft.id }}/download-docx">下载 DOCX</a>
+                    {% endif %}
                   {% endif %}
                 </div>
               </div>

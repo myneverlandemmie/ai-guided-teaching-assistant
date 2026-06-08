@@ -192,7 +192,9 @@ async def test_teaching_prep_reference_can_be_displayed_and_saved(tmp_path: Path
         assert "原有备课参考建议" in page.text
         assert "原有建议内容" in page.text
         assert "下载 Markdown" in page.text
+        assert "下载 DOCX" in page.text
         assert f"/lessons/{lesson_id}/drafts/{draft_id}/download-md" in page.text
+        assert f"/lessons/{lesson_id}/drafts/{draft_id}/download-docx" in page.text
 
         response = await client.post(
             f"/lessons/{lesson_id}/drafts/{draft_id}/save",

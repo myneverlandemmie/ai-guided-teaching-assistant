@@ -147,8 +147,11 @@ async def test_learning_guides_v2_page_renders_generation_and_editing_sections(t
         assert "查看 / 编辑" not in text
         assert "保存教师修改" in visible
         assert "下载 Markdown" in visible
+        assert "下载 DOCX" in visible
         assert f"/ui-v2/lessons/{lesson_id}/diagnostic-probe" in text
         assert f"/ui-v2/lessons/{lesson_id}/materials-outline" in text
+        assert f"/lessons/{lesson_id}/drafts/" in text
+        assert "/download-docx" in text
         for forbidden in ["guide_low", "guide_mid", "guide_high", " low ", " mid ", " high "]:
             assert forbidden not in visible
     finally:

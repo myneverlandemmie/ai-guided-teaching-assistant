@@ -253,6 +253,9 @@
         {% if teaching_prep_reference %}
           <div class="prep-reference-actions-v2">
             <a class="button-link button-ghost" href="/lessons/{{ lesson.id }}/drafts/{{ teaching_prep_reference.id }}/download-md">下载 Markdown</a>
+            {% if teaching_prep_reference.content|trim %}
+              <a class="button-link button-ghost" href="/lessons/{{ lesson.id }}/drafts/{{ teaching_prep_reference.id }}/download-docx">下载 DOCX</a>
+            {% endif %}
           </div>
           <form method="post" action="/lessons/{{ lesson.id }}/drafts/{{ teaching_prep_reference.id }}/save">
             <input type="hidden" name="return_to" value="{{ v2_return_to }}">
