@@ -73,6 +73,13 @@
     </div>
   </section>
 
+  {% set ai_fallback_reason = request.query_params.get("ai_fallback_reason") %}
+  {% if ai_fallback_reason == "missing_api_key" %}
+    <p class="notice ai-fallback-notice">当前未设置 DeepSeek API Key，已生成本地结构化草稿。</p>
+  {% elif ai_fallback_reason == "provider_error" %}
+    <p class="notice ai-fallback-notice">AI 服务暂时不可用，系统已提供本地草稿，可稍后重试。</p>
+  {% endif %}
+
   <section class="materials-upload-panel-v2">
     <div class="section-head-v2">
       <div>

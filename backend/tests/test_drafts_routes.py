@@ -4,8 +4,16 @@ import pytest
 from sqlalchemy import select
 
 from app import main
+from app.services.ai.deepseek_client import DeepSeekProviderError
+from app.services.ai.fallback import (
+    FALLBACK_REASON_MISSING_API_KEY,
+    FALLBACK_REASON_PROVIDER_ERROR,
+    MISSING_API_KEY_FALLBACK_MESSAGE,
+    PROVIDER_ERROR_FALLBACK_MESSAGE,
+)
 from app.models.lesson_draft import LessonDraft
 from tests.support.course_plan_helpers import (
+    SAME_ORIGIN_HEADERS,
     _build_test_client,
     _create_course,
     _create_first_lesson,
@@ -48,7 +56,7 @@ async def test_default_lesson_draft_generation_creates_probe_and_low_guide(tmp_p
 
         assert diagnostic_response.status_code == 303
         assert response.status_code == 303
-        assert response.headers["location"] == "/lessons/1/drafts?draft_fallback=1"
+        assert response.headers["location"] == f"/lessons/1/drafts?ai_fallback_reason={FALLBACK_REASON_MISSING_API_KEY}"
         with session_factory() as session:
             drafts = session.scalars(select(LessonDraft).order_by(LessonDraft.draft_type)).all()
             assert len(drafts) == 2
@@ -96,8 +104,11 @@ async def test_default_lesson_draft_generation_creates_probe_and_low_guide(tmp_p
                 assert "rule_based" not in content
                 assert "mock" not in content
 
-        page_response = await client.get("/lessons/1/drafts")
+        page_response = await client.get(response.headers["location"])
         assert page_response.status_code == 200
+        assert MISSING_API_KEY_FALLBACK_MESSAGE in page_response.text
+        assert f'<p class="notice ai-fallback-notice">{MISSING_API_KEY_FALLBACK_MESSAGE}</p>' in page_response.text
+        assert f'<p class="alert">{MISSING_API_KEY_FALLBACK_MESSAGE}</p>' not in page_response.text
         assert "课前学情测试" in page_response.text
         assert "课前学情与学生导学案" in page_response.text
         assert "以下内容为教师草稿，仅供审阅、修改、复制与导出" in page_response.text
@@ -119,6 +130,117 @@ async def test_default_lesson_draft_generation_creates_probe_and_low_guide(tmp_p
         assert "rule_based" not in page_response.text
         assert "rule-based" not in page_response.text
         assert "mock" not in page_response.text
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_lesson_draft_provider_error_uses_local_fallback_and_friendly_message(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_call(*args: object, **kwargs: object) -> tuple[str, str]:
+        raise DeepSeekProviderError("底层异常：连接被拒绝")
+
+    monkeypatch.setattr("app.services.ai.lesson_draft_ai_service._call_deepseek_lesson_draft", fail_call)
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    return_to = "/ui-v2/lessons/1/diagnostic-probe"
+    try:
+        await _create_first_lesson(client, session_factory, course)
+        _create_reviewed_outline(session_factory)
+        await client.post(
+            "/ai/settings",
+            data={"api_key": "sk-draft-provider-error-1234", "selected_model": "deepseek-v4-flash"},
+            headers=SAME_ORIGIN_HEADERS,
+        )
+
+        response = await client.post(
+            "/lessons/1/drafts/generate/diagnostic_probe",
+            data={"return_to": return_to},
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 303
+        assert response.headers["location"] == f"{return_to}?ai_fallback_reason={FALLBACK_REASON_PROVIDER_ERROR}"
+        with session_factory() as session:
+            draft = session.scalar(select(LessonDraft).where(LessonDraft.draft_type == "diagnostic_probe"))
+            assert draft is not None
+            assert draft.generated_by == "local-structured-draft"
+            assert "题目" in draft.content
+
+        page_response = await client.get(response.headers["location"])
+        assert page_response.status_code == 200
+        assert PROVIDER_ERROR_FALLBACK_MESSAGE in page_response.text
+        assert f'<p class="notice ai-fallback-notice">{PROVIDER_ERROR_FALLBACK_MESSAGE}</p>' in page_response.text
+        assert f'<p class="alert">{PROVIDER_ERROR_FALLBACK_MESSAGE}</p>' not in page_response.text
+        assert "底层异常" not in page_response.text
+        assert "Traceback" not in page_response.text
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_lesson_draft_ai_success_does_not_show_fallback_message(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_call(*args: object, **kwargs: object) -> tuple[str, str]:
+        return """# 0401-测试课次｜基础版导学案草稿
+
+## 学习导航
+- 本课学习目标：理解核心任务。
+
+## 学习情境
+- 结合真实任务观察现象。
+
+## 知识要点
+- 记录关键概念和操作步骤。
+
+## 边学边填
+- 关键步骤是：______。
+
+## 过程记录
+- 记录操作、结果和问题。
+
+## 学习自评
+- [ ] 我能说明本课重点。
+""", "deepseek-v4-flash"
+
+    monkeypatch.setattr("app.services.ai.lesson_draft_ai_service._call_deepseek_lesson_draft", fake_call)
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    return_to = "/ui-v2/lessons/1/learning-guides"
+    try:
+        await _create_first_lesson(client, session_factory, course)
+        _create_reviewed_outline(session_factory)
+        await client.post(
+            "/ai/settings",
+            data={"api_key": "sk-draft-success-1234", "selected_model": "deepseek-v4-flash"},
+            headers=SAME_ORIGIN_HEADERS,
+        )
+
+        response = await client.post(
+            "/lessons/1/drafts/generate/guide_low",
+            data={"return_to": return_to},
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 303
+        assert response.headers["location"] == return_to
+        with session_factory() as session:
+            draft = session.scalar(select(LessonDraft).where(LessonDraft.draft_type == "guide_low"))
+            assert draft is not None
+            assert draft.generated_by == "deepseek-v4-flash"
+            assert "结合真实任务观察现象" in draft.content
+
+        page_response = await client.get(response.headers["location"])
+        assert page_response.status_code == 200
+        assert MISSING_API_KEY_FALLBACK_MESSAGE not in page_response.text
+        assert PROVIDER_ERROR_FALLBACK_MESSAGE not in page_response.text
+        assert "ai-fallback-notice" not in page_response.text
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()

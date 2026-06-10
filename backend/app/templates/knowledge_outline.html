@@ -20,6 +20,12 @@
   </section>
 {% endif %}
 
+{% if fallback_message %}
+  <section class="card">
+    <p class="notice ai-fallback-notice">{{ fallback_message }}</p>
+  </section>
+{% endif %}
+
 {% if outline %}
   <section class="card">
     <p>当前状态：{{ knowledge_outline_status_labels.get(outline.status, outline.status) }}</p>

@@ -12,6 +12,10 @@ from app.models.course import Course
 from app.models.course_plan import CoursePlanUpload, PlannedLesson
 from app.models.knowledge_outline import KnowledgeOutline
 from app.models.lesson import Lesson, LessonMaterial
+from app.services.ai.fallback import (
+    FALLBACK_REASON_MISSING_API_KEY,
+    MISSING_API_KEY_FALLBACK_MESSAGE,
+)
 from app.services.ai.provider import GeneratedOutline
 
 
@@ -355,6 +359,50 @@ async def test_save_knowledge_outline_with_return_to_redirects_to_v2(tmp_path: P
             outline = session.get(KnowledgeOutline, outline_id)
             assert outline is not None
             assert outline.edited_content == "教师修改后的知识主干"
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_generate_knowledge_outline_without_api_key_shows_v2_fallback_message(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AI_PROVIDER", "deepseek")
+    client, session_factory = _build_test_client(tmp_path)
+    lesson_id = _create_lesson(session_factory)
+    return_to = f"/ui-v2/lessons/{lesson_id}/materials-outline"
+
+    async def run_inline(func: object, *args: object, **kwargs: object) -> object:
+        return func(*args, **kwargs)  # type: ignore[misc]
+
+    def fail_if_called(*args: object, **kwargs: object) -> tuple[str, str]:
+        raise AssertionError("无 API Key 时不应调用 DeepSeek")
+
+    monkeypatch.setattr(main, "run_in_threadpool", run_inline)
+    monkeypatch.setattr(main.ai_provider, "generate_deepseek_knowledge_outline", fail_if_called)
+    try:
+        response = await client.post(
+            f"/lessons/{lesson_id}/knowledge-outline/generate",
+            data={"return_to": return_to},
+            headers={"origin": "http://testserver"},
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 303
+        assert response.headers["location"] == f"{return_to}?ai_fallback_reason={FALLBACK_REASON_MISSING_API_KEY}"
+        with session_factory() as session:
+            outline = session.query(KnowledgeOutline).filter(KnowledgeOutline.lesson_id == lesson_id).first()
+            assert outline is not None
+            assert outline.generated_by_model == "local-structured-draft"
+
+        page = await client.get(response.headers["location"])
+        assert page.status_code == 200
+        assert MISSING_API_KEY_FALLBACK_MESSAGE in page.text
+        assert f'<p class="notice ai-fallback-notice">{MISSING_API_KEY_FALLBACK_MESSAGE}</p>' in page.text
+        assert f'<p class="alert">{MISSING_API_KEY_FALLBACK_MESSAGE}</p>' not in page.text
+        assert "Traceback" not in page.text
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()

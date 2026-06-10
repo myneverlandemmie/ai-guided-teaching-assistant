@@ -10,6 +10,12 @@ from app.models.lesson import Lesson, LessonMaterial
 from app.services.ai.deepseek_client import (
     DeepSeekProviderError,
 )
+from app.services.ai.fallback import (
+    FALLBACK_REASON_MISSING_API_KEY,
+    FALLBACK_REASON_PROVIDER_ERROR,
+    MISSING_API_KEY_FALLBACK_MESSAGE,
+    PROVIDER_ERROR_FALLBACK_MESSAGE,
+)
 from app.services.ai.provider import GeneratedOutline
 from tests.support.course_plan_helpers import (
     SAME_ORIGIN_HEADERS,
@@ -27,6 +33,11 @@ async def test_deepseek_generation_without_api_key_uses_local_structured_draft(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("AI_PROVIDER", "deepseek")
+
+    def fail_if_called(*args: object, **kwargs: object) -> tuple[str, str]:
+        raise AssertionError("无 API Key 时不应调用 DeepSeek")
+
+    monkeypatch.setattr(main.ai_provider, "generate_deepseek_knowledge_outline", fail_if_called)
     client, session_factory = _build_test_client(tmp_path)
     course = _create_course(session_factory)
     try:
@@ -47,13 +58,21 @@ async def test_deepseek_generation_without_api_key_uses_local_structured_draft(
         )
 
         assert response.status_code == 303
-        assert response.headers["location"] == "/lessons/1/knowledge-outline"
+        assert response.headers["location"] == (
+            f"/lessons/1/knowledge-outline?ai_fallback_reason={FALLBACK_REASON_MISSING_API_KEY}"
+        )
         with session_factory() as session:
             outline = session.scalar(select(KnowledgeOutline))
             assert outline is not None
             assert outline.generated_by_model == "local-structured-draft"
             assert "本地结构化草稿" in outline.edited_content
             assert "仅供教师参考，需教师审阅、修改与确认" in outline.edited_content
+        page = await client.get(response.headers["location"])
+        assert page.status_code == 200
+        assert MISSING_API_KEY_FALLBACK_MESSAGE in page.text
+        assert f'<p class="notice ai-fallback-notice">{MISSING_API_KEY_FALLBACK_MESSAGE}</p>' in page.text
+        assert f'<p class="alert">{MISSING_API_KEY_FALLBACK_MESSAGE}</p>' not in page.text
+        assert "Traceback" not in page.text
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
@@ -127,6 +146,10 @@ async def test_deepseek_generation_uses_provider_and_saves_outline(
             assert outline.status == "draft"
             assert outline.ai_raw_output == "真实 Provider 测试返回：WHERE 与 IN关键字 知识主干。"
             assert outline.edited_content == outline.ai_raw_output
+        page = await client.get(response.headers["location"])
+        assert MISSING_API_KEY_FALLBACK_MESSAGE not in page.text
+        assert PROVIDER_ERROR_FALLBACK_MESSAGE not in page.text
+        assert "ai-fallback-notice" not in page.text
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
@@ -203,7 +226,7 @@ async def test_generated_outline_is_sanitized_before_saving(
 
 
 @pytest.mark.anyio
-async def test_deepseek_generation_error_does_not_save_outline_or_expose_key(
+async def test_deepseek_generation_error_saves_local_fallback_without_exposing_key(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -216,7 +239,7 @@ async def test_deepseek_generation_error_does_not_save_outline_or_expose_key(
         api_key: str | None,
         selected_model: str | None = None,
     ) -> GeneratedOutline:
-        raise DeepSeekProviderError("DeepSeek 请求超时，请稍后重试或减少材料长度。")
+        raise DeepSeekProviderError("底层异常：DeepSeek 请求超时，请稍后重试或减少材料长度。")
 
     monkeypatch.setattr(main.ai_provider, "generate_knowledge_outline_with_provider", fake_generate)
     client, session_factory = _build_test_client(tmp_path)
@@ -243,12 +266,24 @@ async def test_deepseek_generation_error_does_not_save_outline_or_expose_key(
             follow_redirects=False,
         )
 
-        assert response.status_code == 400
-        assert "请求超时" in response.text
-        assert fake_key not in response.text
+        assert response.status_code == 303
+        assert response.headers["location"] == (
+            f"/lessons/1/knowledge-outline?ai_fallback_reason={FALLBACK_REASON_PROVIDER_ERROR}"
+        )
         with session_factory() as session:
-            assert session.scalar(select(KnowledgeOutline)) is None
+            outline = session.scalar(select(KnowledgeOutline))
+            assert outline is not None
+            assert outline.generated_by_model == "local-structured-draft"
+            assert "本地结构化草稿" in outline.edited_content
             assert _database_contains_text(session, fake_key) is False
+        page = await client.get(response.headers["location"])
+        assert PROVIDER_ERROR_FALLBACK_MESSAGE in page.text
+        assert f'<p class="notice ai-fallback-notice">{PROVIDER_ERROR_FALLBACK_MESSAGE}</p>' in page.text
+        assert f'<p class="alert">{PROVIDER_ERROR_FALLBACK_MESSAGE}</p>' not in page.text
+        assert "底层异常" not in page.text
+        assert "请求超时" not in page.text
+        assert fake_key not in page.text
+        assert "Traceback" not in page.text
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()

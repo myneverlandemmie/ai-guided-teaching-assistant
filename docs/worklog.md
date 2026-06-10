@@ -178,3 +178,35 @@
 - 未完成 / 待确认：未做 Word / WPS 人工打开验收；未扩大 Markdown 支持范围；未 commit、未 push。
 - 风险点：标题去重以字符串包含关系判断 lesson_code、lesson_title 和完整课次 label，能覆盖当前人工验收发现的重复拼接场景；如后续出现更复杂标题规范，可再单独收束。
 - 下一轮建议：人工重新下载已发现重复标题的 DOCX 样例，确认正文 Title 显示为 `课次｜导学案类型` 且不重复。
+
+### 2026-06-08 14:51 +08｜Phase 2.3a：AI fallback reason 与 P0 中文提示统一
+
+- 日期时间：2026-06-08 14:51 +08
+- 本轮目标：统一知识主干、课前学情测试 / 学生导学案、备课参考建议在无 DeepSeek API Key 与 DeepSeek 调用失败两类 P0 fallback 场景下的教师可见中文提示，并让知识主干在 DeepSeek 失败时也生成本地结构化草稿。
+- 本轮修改范围：`backend/app/services/ai/fallback.py`、`backend/app/services/ai/provider.py`、`backend/app/services/ai/lesson_draft_ai_service.py`、`backend/app/services/teaching_prep_reference_service.py`、`backend/app/routes/outlines.py`、`backend/app/routes/drafts.py`、`backend/app/templates/knowledge_outline.html`、`backend/app/templates/lesson_materials_outline_v2.html`、相关测试文件和 `docs/worklog.md`；未修改 `backend/app/main.py`、上传、导出、数据库、依赖配置、README 或审计文档。
+- fallback reason 设计：新增最小 helper `app.services.ai.fallback`，只定义 `missing_api_key`、`provider_error` 两类短 reason，以及两条教师可见文案；导学案和备课参考服务返回兼容旧二元解包的 `FallbackGenerationResult`，同时提供 `fallback_reason` 属性；知识主干 `GeneratedOutline` 增加可选 `fallback_reason`。
+- 无 API Key 提示：知识主干、课前学情测试 / 学生导学案、备课参考建议均显示“当前未设置 DeepSeek API Key，已生成本地结构化草稿。”；无 Key 时不触发真实 DeepSeek 调用。
+- DeepSeek 调用失败提示：知识主干、课前学情测试 / 学生导学案、备课参考建议均显示“AI 服务暂时不可用，系统已提供本地草稿，可稍后重试。”；不展示底层异常字符串、traceback、API Key、完整 prompt 或上传材料全文。
+- 覆盖情况：知识主干 provider 复用本地结构化草稿生成路径，并在 DeepSeek provider error 时保存 `local-structured-draft`；导学案 / 学情测试保留原本地 fallback 与 upsert 语义；备课参考建议生成后通过 redirect query 在 V2 资料整理页显示 fallback 提示；正常 AI 成功路径不追加 fallback reason，不显示 fallback 提示。
+- 新增或调整测试：新增 V2 知识主干无 Key 提示、导学案 provider_error 提示、导学案成功无提示、备课参考 provider_error 提示、备课参考成功无提示等 5 个测试；调整知识主干无 Key、知识主干 DeepSeek 失败、导学案无 Key、备课参考无 Key和服务层 reason 断言。
+- 施工前测试结果：已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest --collect-only -q`，结果 `163 tests collected in 1.25s`；已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `163 passed in 32.90s`。
+- 施工后测试结果：已运行受影响测试集 `PYTHONPATH=. ../.venv/bin/pytest -q tests/test_demo_fallback.py tests/test_lesson_draft_ai_generation.py tests/test_deepseek_timeout_and_material_budget.py tests/test_outlines_provider_fallback.py tests/test_lesson_materials_outline_v2_ui.py tests/test_drafts_routes.py tests/test_teaching_prep_reference_suggestions.py`，结果 `49 passed in 17.94s`；已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest --collect-only -q`，结果 `168 tests collected in 1.14s`，比施工前新增 5 个测试；已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `168 passed in 47.88s`。
+- `git diff --check` 结果：已运行，结果无输出。
+- 未完成 / 待确认：本轮未处理 return_to 非法提示、学习通导出失败、Markdown 下载失败、DOCX 下载失败、上传错误、账号体系、部署或全局异常页面；未做浏览器人工页面验收；未 commit、未 push。
+- 风险点：V2 资料整理页的 fallback 提示通过安全短 query reason 直接在模板读取展示，避免修改本轮禁止的 `materials.py`；建议人工分别在无 Key 和模拟 DeepSeek 失败场景下检查知识主干、课前学情测试、学生导学案和备课参考建议页面提示位置是否符合预期。
+- 下一轮建议：继续按 Phase 2 审计拆分小步处理，优先选择导出失败中文提示或 return_to 非法提示，不要与 AI fallback 再混合施工。
+
+### 2026-06-10 14:22 +08｜Phase 2.3b：AI fallback 提示样式收束
+
+- 日期时间：2026-06-10 14:22 +08
+- 本轮目标：只修 Phase 2.3a 人工验收发现的 AI fallback 提示视觉语义，将无 DeepSeek API Key 与 DeepSeek provider error 的教师可见提示从绿色成功态收束为 warning / notice 提示态。
+- 本轮修改范围：`backend/app/templates/knowledge_outline.html`、`backend/app/templates/lesson_materials_outline_v2.html`、`backend/app/templates/diagnostic_probe_v2.html`、`backend/app/templates/learning_guides_v2.html`、`backend/app/templates/lesson_drafts.html`、`backend/tests/test_lesson_materials_outline_v2_ui.py`、`backend/tests/test_outlines_provider_fallback.py`、`backend/tests/test_drafts_routes.py`、`backend/tests/test_teaching_prep_reference_suggestions.py`、`docs/worklog.md`。
+- 已完成内容：复用项目已有 `.notice` 浅黄 warning 样式，为所有 fallback 提示增加 `ai-fallback-notice` 标识；legacy 知识主干页、V2 资料主干页、课前学情测试 V2 页、学生导学案 V2 页、legacy 导学草稿页和备课参考建议所在的 V2 资料整理页均不再用 `.alert` 渲染 fallback 提示；学习通导出成功提示和导学案依赖提示未纳入本轮 fallback 样式调整。
+- 文案与业务逻辑：`missing_api_key` 文案仍为“当前未设置 DeepSeek API Key，已生成本地结构化草稿。”；`provider_error` 文案仍为“AI 服务暂时不可用，系统已提供本地草稿，可稍后重试。”；未修改 fallback reason、AI 生成逻辑、API Key 存储、DeepSeek 调用、route、service、数据库、上传或导出逻辑。
+- 新增或调整测试：调整现有 fallback UI 断言，确认 missing_api_key / provider_error 提示包含 `notice ai-fallback-notice`、不再以 `<p class="alert">...` 渲染；正常 AI 成功路径继续断言不显示两类 fallback 文案，且不出现 `ai-fallback-notice`。本轮未新增测试数量。
+- 施工前测试结果：已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `168 passed in 55.28s`。
+- 施工后测试结果：已运行受影响测试集 `PYTHONPATH=. ../.venv/bin/pytest -q tests/test_lesson_materials_outline_v2_ui.py tests/test_outlines_provider_fallback.py tests/test_drafts_routes.py tests/test_teaching_prep_reference_suggestions.py`，结果 `36 passed in 19.16s`；已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest --collect-only -q`，结果 `168 tests collected in 1.20s`；已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `168 passed in 50.42s`。
+- `git diff --check` 结果：已运行，结果无输出。
+- 未完成 / 待确认：未做浏览器人工页面验收；未处理 return_to 非法提示、学习通导出失败、Markdown / DOCX 下载失败、上传错误、账号体系或部署问题；未 commit、未 push。
+- 风险点：本轮未改 CSS，仅复用 `.notice` 现有样式；如人工希望 V2 页面有更独立的 info/warning 视觉，可后续单独补极小 CSS，但当前已避免 fallback 呈现为绿色成功态。
+- 下一轮建议：人工分别查看无 Key 和模拟 provider_error 场景下的知识主干、课前学情测试、学生导学案和备课参考建议提示位置与视觉是否符合预期。

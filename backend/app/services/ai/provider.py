@@ -7,9 +7,11 @@ from dataclasses import dataclass
 
 from app.models.lesson import Lesson, LessonMaterial
 from app.services.ai.deepseek_client import DeepSeekProviderError, generate_deepseek_knowledge_outline, get_deepseek_config
+from app.services.ai.fallback import FALLBACK_REASON_MISSING_API_KEY, FALLBACK_REASON_PROVIDER_ERROR
 from app.services.ai.mock_outline_service import MOCK_OUTLINE_MODEL_NAME, generate_mock_knowledge_outline
 
 DEFAULT_AI_PROVIDER = "deepseek"
+LOCAL_STRUCTURED_DRAFT = "local-structured-draft"
 
 
 @dataclass(frozen=True)
@@ -18,12 +20,27 @@ class GeneratedOutline:
 
     content: str
     model_name: str
+    fallback_reason: str | None = None
 
 
 def get_ai_provider_name() -> str:
     """读取当前 AI Provider 名称。"""
 
     return os.getenv("AI_PROVIDER", DEFAULT_AI_PROVIDER).strip().lower() or DEFAULT_AI_PROVIDER
+
+
+def generate_local_knowledge_outline(
+    lesson: Lesson,
+    materials: list[LessonMaterial],
+    fallback_reason: str,
+) -> GeneratedOutline:
+    """生成知识主干本地结构化草稿，并标记 fallback reason。"""
+
+    return GeneratedOutline(
+        generate_mock_knowledge_outline(lesson, materials),
+        LOCAL_STRUCTURED_DRAFT,
+        fallback_reason,
+    )
 
 
 def generate_knowledge_outline_with_provider(
@@ -55,14 +72,17 @@ def generate_knowledge_outline_with_provider(
 
     if active_provider == "deepseek":
         if not api_key:
-            return GeneratedOutline(generate_mock_knowledge_outline(lesson, materials), "local-structured-draft")
-        content, model_name = generate_deepseek_knowledge_outline(
-            lesson,
-            materials,
-            api_key,
-            selected_model,
-            get_deepseek_config(selected_model),
-        )
+            return generate_local_knowledge_outline(lesson, materials, FALLBACK_REASON_MISSING_API_KEY)
+        try:
+            content, model_name = generate_deepseek_knowledge_outline(
+                lesson,
+                materials,
+                api_key,
+                selected_model,
+                get_deepseek_config(selected_model),
+            )
+        except DeepSeekProviderError:
+            return generate_local_knowledge_outline(lesson, materials, FALLBACK_REASON_PROVIDER_ERROR)
         return GeneratedOutline(content, model_name)
 
     raise DeepSeekProviderError("AI Provider 配置无效，请使用 deepseek 或 mock。")

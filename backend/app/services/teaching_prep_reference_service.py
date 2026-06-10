@@ -9,6 +9,11 @@ import httpx
 from app.models.knowledge_outline import KnowledgeOutline
 from app.models.lesson import Lesson, LessonMaterial
 from app.services.ai.deepseek_client import DeepSeekProviderError, get_deepseek_config
+from app.services.ai.fallback import (
+    FALLBACK_REASON_MISSING_API_KEY,
+    FALLBACK_REASON_PROVIDER_ERROR,
+    FallbackGenerationResult,
+)
 from app.services.ai.lesson_draft_service import GeneratedLessonDraft
 from app.services.ai.sanitizer import sanitize_text_for_outline
 
@@ -241,21 +246,24 @@ def generate_teaching_prep_reference(
     outline: KnowledgeOutline | None,
     api_key: str | None,
     selected_model: str | None,
-) -> tuple[GeneratedLessonDraft, bool]:
+) -> FallbackGenerationResult[GeneratedLessonDraft]:
     """生成备课参考建议；无 Key 或失败时回退本地结构化草稿。"""
 
     local_draft = generate_local_teaching_prep_reference(lesson, materials, outline)
     if not api_key:
-        return local_draft, True
+        return FallbackGenerationResult(local_draft, True, FALLBACK_REASON_MISSING_API_KEY)
     try:
         content, model_name = _call_deepseek_teaching_prep_reference(lesson, materials, outline, api_key, selected_model)
     except DeepSeekProviderError:
-        return local_draft, True
+        return FallbackGenerationResult(local_draft, True, FALLBACK_REASON_PROVIDER_ERROR)
     if not _is_usable_reference_content(content):
-        return local_draft, True
-    return GeneratedLessonDraft(
-        TEACHING_PREP_REFERENCE_DRAFT_TYPE,
-        local_draft.title,
-        content,
-        generated_by=model_name,
-    ), False
+        return FallbackGenerationResult(local_draft, True, FALLBACK_REASON_PROVIDER_ERROR)
+    return FallbackGenerationResult(
+        GeneratedLessonDraft(
+            TEACHING_PREP_REFERENCE_DRAFT_TYPE,
+            local_draft.title,
+            content,
+            generated_by=model_name,
+        ),
+        False,
+    )

@@ -15,6 +15,11 @@ from app.models.knowledge_outline import KnowledgeOutline
 from app.models.lesson import Lesson, LessonMaterial
 from app.models.lesson_draft import LESSON_DRAFT_TYPES, LessonDraft
 from app.services.ai.deepseek_client import get_default_deepseek_model
+from app.services.ai.fallback import (
+    FALLBACK_REASON_PROVIDER_ERROR,
+    FALLBACK_REASON_QUERY_PARAM,
+    fallback_message_for_reason,
+)
 from app.services.ai.lesson_draft_ai_service import generate_single_lesson_draft_with_ai
 from app.services.ai.session_key_store import (
     SESSION_COOKIE_NAME,
@@ -54,6 +59,23 @@ def create_drafts_router(
 
     router = APIRouter()
 
+    def _fallback_message_from_query(request: Request) -> str | None:
+        """读取短 reason 并转换为教师可见 fallback 提示。"""
+
+        message = fallback_message_for_reason(request.query_params.get(FALLBACK_REASON_QUERY_PARAM))
+        if message:
+            return message
+        if request.query_params.get("draft_fallback") == "1":
+            return fallback_message_for_reason(FALLBACK_REASON_PROVIDER_ERROR)
+        return None
+
+    def _append_fallback_reason(path: str, used_fallback: bool, fallback_reason: str | None) -> str:
+        """按需追加 AI fallback reason。"""
+
+        if not used_fallback:
+            return path
+        return append_query_param(path, FALLBACK_REASON_QUERY_PARAM, fallback_reason or FALLBACK_REASON_PROVIDER_ERROR)
+
     @router.get("/ui-v2/lessons/{lesson_id}/diagnostic-probe", response_class=HTMLResponse)
     async def show_diagnostic_probe_v2(
         lesson_id: int,
@@ -72,11 +94,7 @@ def create_drafts_router(
 
         draft = get_lesson_draft_by_type(db, lesson.id, "diagnostic_probe")
         chaoxing_filename = safe_export_filename(request.query_params.get("chaoxing_file"), ".xlsx")
-        fallback_message = (
-            "DeepSeek 响应较慢、调用失败或当前未设置 API Key，已回退为本地结构化草稿。你可以稍后重试，或减少材料后再生成。"
-            if request.query_params.get("draft_fallback") == "1"
-            else None
-        )
+        fallback_message = _fallback_message_from_query(request)
         return templates.TemplateResponse(
             request,
             "diagnostic_probe_v2.html",
@@ -112,11 +130,7 @@ def create_drafts_router(
             for draft in get_lesson_drafts(db, lesson.id)
             if draft.draft_type in {"guide_low", "guide_mid", "guide_high"}
         }
-        fallback_message = (
-            "DeepSeek 响应较慢、调用失败或当前未设置 API Key，已回退为本地结构化草稿。你可以稍后重试，或减少材料后再生成。"
-            if request.query_params.get("draft_fallback") == "1"
-            else None
-        )
+        fallback_message = _fallback_message_from_query(request)
         return templates.TemplateResponse(
             request,
             "learning_guides_v2.html",
@@ -147,11 +161,7 @@ def create_drafts_router(
         outline = get_latest_knowledge_outline(db, lesson.id)
         drafts = get_lesson_drafts(db, lesson.id)
         chaoxing_filename = safe_export_filename(request.query_params.get("chaoxing_file"), ".xlsx")
-        fallback_message = (
-            "DeepSeek 响应较慢、调用失败或当前未设置 API Key，已回退为本地结构化草稿。你可以稍后重试，或减少材料后再生成。"
-            if request.query_params.get("draft_fallback") == "1"
-            else None
-        )
+        fallback_message = _fallback_message_from_query(request)
         return templates.TemplateResponse(
             request,
             "lesson_drafts.html",
@@ -185,7 +195,7 @@ def create_drafts_router(
             return RedirectResponse(url=f"/lessons/{lesson.id}/drafts", status_code=303)
 
         session_id = request.cookies.get(SESSION_COOKIE_NAME)
-        draft, used_fallback = await run_in_threadpool_func(
+        result = await run_in_threadpool_func(
             generate_single_lesson_draft_with_ai,
             lesson,
             outline,
@@ -193,10 +203,15 @@ def create_drafts_router(
             get_session_api_key(session_id),
             get_session_selected_model(session_id) or get_default_deepseek_model(),
         )
+        draft, used_fallback = result
         upsert_lesson_drafts(db, lesson, outline, [draft])
         db.commit()
-        suffix = "?draft_fallback=1" if used_fallback else ""
-        return RedirectResponse(url=f"/lessons/{lesson.id}/drafts{suffix}", status_code=303)
+        redirect_to = _append_fallback_reason(
+            f"/lessons/{lesson.id}/drafts",
+            used_fallback,
+            getattr(result, "fallback_reason", None),
+        )
+        return RedirectResponse(url=redirect_to, status_code=303)
 
     @router.post("/lessons/{lesson_id}/drafts/generate/teaching_prep_reference")
     async def generate_teaching_prep_reference_route(
@@ -222,7 +237,7 @@ def create_drafts_router(
         ).all()
         outline = get_latest_knowledge_outline(db, lesson.id)
         session_id = request.cookies.get(SESSION_COOKIE_NAME)
-        draft, _used_fallback = await run_in_threadpool_func(
+        result = await run_in_threadpool_func(
             generate_teaching_prep_reference,
             lesson,
             materials,
@@ -230,9 +245,11 @@ def create_drafts_router(
             get_session_api_key(session_id),
             get_session_selected_model(session_id) or get_default_deepseek_model(),
         )
+        draft, used_fallback = result
         upsert_lesson_drafts(db, lesson, outline, [draft])
         db.commit()
         redirect_to = sanitize_next_path(return_to) or f"/lessons/{lesson.id}/drafts"
+        redirect_to = _append_fallback_reason(redirect_to, used_fallback, getattr(result, "fallback_reason", None))
         return RedirectResponse(url=redirect_to, status_code=303)
 
     @router.post("/lessons/{lesson_id}/drafts/generate/{draft_type}")
@@ -282,7 +299,7 @@ def create_drafts_router(
         api_key = get_session_api_key(session_id)
         selected_model = get_session_selected_model(session_id) or get_default_deepseek_model()
         if api_key:
-            draft, used_fallback = await run_in_threadpool_func(
+            result = await run_in_threadpool_func(
                 generate_single_lesson_draft_with_ai,
                 lesson,
                 outline,
@@ -292,7 +309,7 @@ def create_drafts_router(
                 related_drafts,
             )
         else:
-            draft, used_fallback = generate_single_lesson_draft_with_ai(
+            result = generate_single_lesson_draft_with_ai(
                 lesson,
                 outline,
                 draft_type,
@@ -300,11 +317,11 @@ def create_drafts_router(
                 selected_model,
                 related_drafts,
             )
+        draft, used_fallback = result
         upsert_lesson_drafts(db, lesson, outline, [draft])
         db.commit()
         redirect_to = sanitize_next_path(return_to) or f"/lessons/{lesson.id}/drafts"
-        if used_fallback:
-            redirect_to = append_query_param(redirect_to, "draft_fallback", "1")
+        redirect_to = _append_fallback_reason(redirect_to, used_fallback, getattr(result, "fallback_reason", None))
         return RedirectResponse(url=redirect_to, status_code=303)
 
     @router.post("/lessons/{lesson_id}/drafts/{draft_id}/save")

@@ -3,6 +3,7 @@ import pytest
 from app.models.knowledge_outline import KnowledgeOutline
 from app.models.lesson import Lesson
 from app.services.ai.deepseek_client import DeepSeekProviderError, get_deepseek_config, get_deepseek_timeout_seconds
+from app.services.ai.fallback import FALLBACK_REASON_PROVIDER_ERROR
 from app.services.ai.lesson_draft_ai_service import generate_single_lesson_draft_with_ai
 from app.services.ai.lesson_draft_prompt import build_lesson_draft_prompt, trim_text_to_budget
 
@@ -62,15 +63,17 @@ def test_timeout_fallback_only_returns_current_draft_type(monkeypatch: pytest.Mo
 
     monkeypatch.setattr("app.services.ai.lesson_draft_ai_service._call_deepseek_lesson_draft", fake_timeout)
 
-    draft, used_fallback = generate_single_lesson_draft_with_ai(
+    result = generate_single_lesson_draft_with_ai(
         _lesson(),
         _outline("知识主干：静态工作点、放大倍数、实验步骤和安全注意事项。"),
         "guide_mid",
         "sk-test-not-real",
         "deepseek-v4-pro",
     )
+    draft, used_fallback = result
 
     assert used_fallback is True
+    assert result.fallback_reason == FALLBACK_REASON_PROVIDER_ERROR
     assert draft.draft_type == "guide_mid"
     assert draft.generated_by == "local-structured-draft"
     assert draft.content

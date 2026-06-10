@@ -1,6 +1,7 @@
 from app.models.knowledge_outline import KnowledgeOutline
 from app.models.lesson import Lesson
 from app.services.ai.deepseek_client import DeepSeekProviderError
+from app.services.ai.fallback import FALLBACK_REASON_MISSING_API_KEY, FALLBACK_REASON_PROVIDER_ERROR
 from app.services.ai.lesson_draft_ai_service import (
     generate_basic_lesson_drafts_with_ai,
     generate_tiered_guide_draft_with_ai,
@@ -94,9 +95,11 @@ def _ai_guide_content(label: str = "基础版导学案") -> str:
 
 
 def test_lesson_drafts_without_api_key_use_local_structured_drafts() -> None:
-    drafts, used_fallback = generate_basic_lesson_drafts_with_ai(_lesson(), _outline(), None, "deepseek-v4-flash")
+    result = generate_basic_lesson_drafts_with_ai(_lesson(), _outline(), None, "deepseek-v4-flash")
+    drafts, used_fallback = result
 
     assert used_fallback is True
+    assert result.fallback_reason == FALLBACK_REASON_MISSING_API_KEY
     assert {draft.draft_type for draft in drafts} == {"diagnostic_probe", "guide_low"}
     assert {draft.generated_by for draft in drafts} == {"local-structured-draft"}
 
@@ -112,14 +115,16 @@ def test_lesson_drafts_use_deepseek_content_when_api_succeeds(monkeypatch) -> No
 
     monkeypatch.setattr("app.services.ai.lesson_draft_ai_service._call_deepseek_lesson_draft", fake_call)
 
-    drafts, used_fallback = generate_basic_lesson_drafts_with_ai(
+    result = generate_basic_lesson_drafts_with_ai(
         _lesson(),
         _outline(),
         "sk-test-not-real",
         "deepseek-v4-flash",
     )
+    drafts, used_fallback = result
 
     assert used_fallback is False
+    assert result.fallback_reason is None
     assert calls == ["diagnostic_probe", "guide_low"]
     assert {draft.generated_by for draft in drafts} == {"deepseek-v4-flash"}
     assert any("分组查询前应先确认什么" in draft.content for draft in drafts)
@@ -131,14 +136,16 @@ def test_lesson_drafts_fallback_when_api_raises(monkeypatch) -> None:
 
     monkeypatch.setattr("app.services.ai.lesson_draft_ai_service._call_deepseek_lesson_draft", fake_call)
 
-    drafts, used_fallback = generate_basic_lesson_drafts_with_ai(
+    result = generate_basic_lesson_drafts_with_ai(
         _lesson(),
         _outline(),
         "sk-test-not-real",
         "deepseek-v4-flash",
     )
+    drafts, used_fallback = result
 
     assert used_fallback is True
+    assert result.fallback_reason == FALLBACK_REASON_PROVIDER_ERROR
     assert {draft.generated_by for draft in drafts} == {"local-structured-draft"}
 
 
@@ -161,15 +168,17 @@ def test_tiered_guide_uses_ai_model_or_fallback(monkeypatch) -> None:
 
     monkeypatch.setattr("app.services.ai.lesson_draft_ai_service._call_deepseek_lesson_draft", fake_call)
 
-    draft, used_fallback = generate_tiered_guide_draft_with_ai(
+    result = generate_tiered_guide_draft_with_ai(
         _lesson(),
         _outline(),
         "guide_mid",
         "sk-test-not-real",
         "deepseek-v4-pro",
     )
+    draft, used_fallback = result
 
     assert used_fallback is False
+    assert result.fallback_reason is None
     assert draft.generated_by == "deepseek-v4-pro"
     assert "提升任务包" in draft.content
 

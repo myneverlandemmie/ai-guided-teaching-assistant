@@ -9,6 +9,11 @@ import httpx
 from app.models.knowledge_outline import KnowledgeOutline
 from app.models.lesson import Lesson
 from app.services.ai.deepseek_client import DeepSeekProviderError, get_deepseek_config
+from app.services.ai.fallback import (
+    FALLBACK_REASON_MISSING_API_KEY,
+    FALLBACK_REASON_PROVIDER_ERROR,
+    FallbackGenerationResult,
+)
 from app.services.ai.lesson_draft_prompt import LESSON_DRAFT_SYSTEM_MESSAGE, build_lesson_draft_prompt
 from app.services.ai.lesson_draft_service import (
     GeneratedLessonDraft,
@@ -144,7 +149,7 @@ def generate_basic_lesson_drafts_with_ai(
     outline: KnowledgeOutline,
     api_key: str | None,
     selected_model: str | None,
-) -> tuple[list[GeneratedLessonDraft], bool]:
+) -> FallbackGenerationResult[list[GeneratedLessonDraft]]:
     """生成课前学情测试和基础版导学案，有 Key 时优先调用 DeepSeek。
 
     Returns:
@@ -152,7 +157,11 @@ def generate_basic_lesson_drafts_with_ai(
     """
 
     if not api_key:
-        return _fallback_basic_drafts(lesson, outline), True
+        return FallbackGenerationResult(
+            _fallback_basic_drafts(lesson, outline),
+            True,
+            FALLBACK_REASON_MISSING_API_KEY,
+        )
 
     local_drafts = _fallback_basic_drafts(lesson, outline)
     generated: list[GeneratedLessonDraft] = []
@@ -166,13 +175,13 @@ def generate_basic_lesson_drafts_with_ai(
                 selected_model,
             )
             if not _is_usable_draft_content(local_draft.draft_type, content):
-                return local_drafts, True
+                return FallbackGenerationResult(local_drafts, True, FALLBACK_REASON_PROVIDER_ERROR)
             generated.append(
                 GeneratedLessonDraft(local_draft.draft_type, local_draft.title, content, generated_by=model_name)
             )
     except DeepSeekProviderError:
-        return local_drafts, True
-    return generated, False
+        return FallbackGenerationResult(local_drafts, True, FALLBACK_REASON_PROVIDER_ERROR)
+    return FallbackGenerationResult(generated, False)
 
 
 def generate_tiered_guide_draft_with_ai(
@@ -181,19 +190,22 @@ def generate_tiered_guide_draft_with_ai(
     draft_type: str,
     api_key: str | None,
     selected_model: str | None,
-) -> tuple[GeneratedLessonDraft, bool]:
+) -> FallbackGenerationResult[GeneratedLessonDraft]:
     """生成提升任务包或拓展挑战包，有 Key 时优先调用 DeepSeek。"""
 
     local_draft = _fallback_tiered_draft(lesson, outline, draft_type)
     if not api_key:
-        return local_draft, True
+        return FallbackGenerationResult(local_draft, True, FALLBACK_REASON_MISSING_API_KEY)
     try:
         content, model_name = _call_deepseek_lesson_draft(lesson, outline, draft_type, api_key, selected_model)
     except DeepSeekProviderError:
-        return local_draft, True
+        return FallbackGenerationResult(local_draft, True, FALLBACK_REASON_PROVIDER_ERROR)
     if not _is_usable_draft_content(draft_type, content):
-        return local_draft, True
-    return GeneratedLessonDraft(draft_type, local_draft.title, content, generated_by=model_name), False
+        return FallbackGenerationResult(local_draft, True, FALLBACK_REASON_PROVIDER_ERROR)
+    return FallbackGenerationResult(
+        GeneratedLessonDraft(draft_type, local_draft.title, content, generated_by=model_name),
+        False,
+    )
 
 
 def generate_single_lesson_draft_with_ai(
@@ -203,12 +215,12 @@ def generate_single_lesson_draft_with_ai(
     api_key: str | None,
     selected_model: str | None,
     related_drafts: dict[str, str] | None = None,
-) -> tuple[GeneratedLessonDraft, bool]:
+) -> FallbackGenerationResult[GeneratedLessonDraft]:
     """只生成指定 draft_type；AI 失败时也只 fallback 当前草稿。"""
 
     local_draft = _fallback_single_draft(lesson, outline, draft_type)
     if not api_key:
-        return local_draft, True
+        return FallbackGenerationResult(local_draft, True, FALLBACK_REASON_MISSING_API_KEY)
     try:
         if related_drafts:
             content, model_name = _call_deepseek_lesson_draft(
@@ -222,7 +234,10 @@ def generate_single_lesson_draft_with_ai(
         else:
             content, model_name = _call_deepseek_lesson_draft(lesson, outline, draft_type, api_key, selected_model)
     except DeepSeekProviderError:
-        return local_draft, True
+        return FallbackGenerationResult(local_draft, True, FALLBACK_REASON_PROVIDER_ERROR)
     if not _is_usable_draft_content(draft_type, content):
-        return local_draft, True
-    return GeneratedLessonDraft(draft_type, local_draft.title, content, generated_by=model_name), False
+        return FallbackGenerationResult(local_draft, True, FALLBACK_REASON_PROVIDER_ERROR)
+    return FallbackGenerationResult(
+        GeneratedLessonDraft(draft_type, local_draft.title, content, generated_by=model_name),
+        False,
+    )
