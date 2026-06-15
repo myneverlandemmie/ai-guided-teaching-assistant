@@ -40,7 +40,8 @@ async def test_upload_page_uses_safe_return_to_for_v2_entry(tmp_path: Path) -> N
     try:
         response = await client.get(f"/courses/{course.id}/course-plan/upload?return_to=/ui-v2/courses")
         unsafe_response = await client.get(
-            f"/courses/{course.id}/course-plan/upload?return_to=https://evil.example/path"
+            f"/courses/{course.id}/course-plan/upload?return_to=https://evil.example/path",
+            follow_redirects=False,
         )
 
         assert response.status_code == 200
@@ -48,10 +49,13 @@ async def test_upload_page_uses_safe_return_to_for_v2_entry(tmp_path: Path) -> N
         assert 'name="return_to" value="/ui-v2/courses"' in response.text
         assert "智学导评 V0.2" in response.text
         assert "课程列表" not in response.text
-        assert unsafe_response.status_code == 200
-        assert 'href="https://evil.example/path"' not in unsafe_response.text
-        assert 'href="/courses"' in unsafe_response.text
-        assert "智学导评 V0.2" not in unsafe_response.text
+        assert unsafe_response.status_code == 303
+        assert unsafe_response.headers["location"] == "/ui-v2/courses?return_to_invalid=1"
+        assert "evil.example" not in unsafe_response.headers["location"]
+        unsafe_page = await client.get(unsafe_response.headers["location"])
+        assert unsafe_page.status_code == 200
+        assert "返回地址无效，已返回课程中心。" in unsafe_page.text
+        assert "evil.example" not in unsafe_page.text
 
         upload_response = await client.post(
             f"/courses/{course.id}/course-plan/upload",

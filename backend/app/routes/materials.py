@@ -25,6 +25,7 @@ from app.services.lesson_materials.document_text_extractor import (
 from app.services.teaching_prep_reference_service import TEACHING_PREP_REFERENCE_DRAFT_TYPE
 
 SanitizeNextPath = Callable[[str | None], str | None]
+ResolveReturnToPath = Callable[[str | None, str], tuple[str, bool]]
 GetLatestKnowledgeOutline = Callable[[Session, int], KnowledgeOutline | None]
 GetLessonDraftByType = Callable[[Session, int, str], LessonDraft | None]
 GetUploadDir = Callable[[], Path]
@@ -62,6 +63,7 @@ async def _is_lesson_material_upload_too_large(uploaded_file: UploadFile) -> boo
 def create_materials_router(
     templates: Jinja2Templates,
     sanitize_next_path: SanitizeNextPath,
+    resolve_return_to_path: ResolveReturnToPath,
     get_latest_knowledge_outline: GetLatestKnowledgeOutline,
     get_lesson_draft_by_type: GetLessonDraftByType,
     get_lesson_material_upload_dir: GetUploadDir,
@@ -210,7 +212,7 @@ def create_materials_router(
     ) -> Response:
         """为课次添加教学材料，支持粘贴文本和多文件上传。"""
 
-        redirect_to = sanitize_next_path(return_to) or f"/lessons/{lesson_id}"
+        redirect_to, _return_to_invalid = resolve_return_to_path(return_to, f"/lessons/{lesson_id}")
         lesson = db.get(Lesson, lesson_id)
         if lesson is None:
             raise HTTPException(status_code=404, detail="课次不存在")
@@ -323,6 +325,7 @@ def create_materials_router(
             Path(material.file_path).unlink(missing_ok=True)
         db.delete(material)
         db.commit()
-        return RedirectResponse(url=sanitize_next_path(return_to) or f"/lessons/{lesson_id}", status_code=303)
+        redirect_to, _return_to_invalid = resolve_return_to_path(return_to, f"/lessons/{lesson_id}")
+        return RedirectResponse(url=redirect_to, status_code=303)
 
     return router

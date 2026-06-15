@@ -210,3 +210,19 @@
 - 未完成 / 待确认：未做浏览器人工页面验收；未处理 return_to 非法提示、学习通导出失败、Markdown / DOCX 下载失败、上传错误、账号体系或部署问题；未 commit、未 push。
 - 风险点：本轮未改 CSS，仅复用 `.notice` 现有样式；如人工希望 V2 页面有更独立的 info/warning 视觉，可后续单独补极小 CSS，但当前已避免 fallback 呈现为绿色成功态。
 - 下一轮建议：人工分别查看无 Key 和模拟 provider_error 场景下的知识主干、课前学情测试、学生导学案和备课参考建议提示位置与视觉是否符合预期。
+
+### 2026-06-14 10:43 +08｜Phase 2.4：return_to 非法回退提示
+
+- 日期时间：2026-06-14 10:43 +08
+- 本轮目标：只处理 `return_to` 非法时的教师可见中文提示，保持开放跳转防护，不处理导出失败、AI fallback、上传错误、账号体系、部署或全局异常页面。
+- 本轮修改范围：`backend/app/main.py`、`backend/app/routes/courses.py`、`backend/app/routes/course_plans.py`、`backend/app/routes/materials.py`、`backend/app/routes/outlines.py`、`backend/app/routes/drafts.py`、`backend/app/routes/exports.py`、`backend/app/templates/courses_v2.html`、`backend/tests/test_ai_settings_routes.py`、`backend/tests/test_course_plans_routes.py`、`backend/tests/test_lesson_materials_outline_v2_ui.py`、`docs/worklog.md`。
+- return_to 非法提示实现方式：保留原 `sanitize_next_path` 兼容语义，新增 `sanitize_next_path_with_status(...)` 返回 `(safe_path, was_invalid)`；新增 `resolve_return_to_path(...)`，在非空 `return_to` 非法时统一回退 `/ui-v2/courses?return_to_invalid=1`；课程中心 V2 页面根据安全短标记显示固定文案“返回地址无效，已返回课程中心。”。
+- 开放跳转防护保持情况：继续拒绝外部 URL、协议相对 URL、反斜杠路径、控制字符、带 scheme / netloc 的 URL；非法原始 URL 不进入重定向目标，不进入页面展示；合法站内 `return_to` 保持原路径返回；空 `return_to` 继续走各 route 原默认页面。
+- 新增或调整测试：扩展 sanitizer/helper 断言；调整授课计划上传页非法 `return_to` 测试，从静默回退改为课程中心提示；将课次资料提交非法 `return_to` 测试参数化覆盖 `https://evil.example/path`、`//evil.example/path`、`/\\evil`；合法 V2 `return_to` 测试新增“不显示非法提示”断言。
+- pytest collect-only 结果：施工前 `168 tests collected in 1.40s`；施工后 `170 tests collected in 0.66s`，比施工前增加 2 个参数化非法 `return_to` 场景。
+- 完整 pytest 结果：施工前 `168 passed in 34.46s`；施工后 `170 passed in 35.89s`。
+- `git diff --check` 结果：已运行，结果无输出。
+- 未完成 / 待确认：未做浏览器人工页面验收；未处理学习通导出失败、Markdown 下载失败、DOCX 下载失败、授课计划上传大小限制、AI fallback、上传格式、账号体系、部署或全局异常页面。
+- 风险点：非法 `return_to` 现在统一回 V2 课程中心提示；这符合本轮目标文案，但部分 legacy route 的非法返回不再停留在原 legacy 默认页。合法 return_to 与空 return_to 未改变。
+- 下一轮建议：继续按 Phase 2 审计小步处理，优先单独安排导出 / 下载失败中文提示，不要与 return_to 或 AI fallback 混合。
+- 提交状态：未 commit，未 push。

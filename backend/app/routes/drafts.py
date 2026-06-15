@@ -29,6 +29,7 @@ from app.services.ai.session_key_store import (
 from app.services.teaching_prep_reference_service import generate_teaching_prep_reference
 
 SanitizeNextPath = Callable[[str | None], str | None]
+ResolveReturnToPath = Callable[[str | None, str], tuple[str, bool]]
 GetLatestKnowledgeOutline = Callable[[Session, int], KnowledgeOutline | None]
 GetLessonDrafts = Callable[[Session, int], list[LessonDraft]]
 GetLessonDraftByType = Callable[[Session, int, str], LessonDraft | None]
@@ -43,6 +44,7 @@ RunInThreadpool = Callable[..., Awaitable[object]]
 def create_drafts_router(
     templates: Jinja2Templates,
     sanitize_next_path: SanitizeNextPath,
+    resolve_return_to_path: ResolveReturnToPath,
     run_in_threadpool_func: RunInThreadpool,
     get_latest_knowledge_outline: GetLatestKnowledgeOutline,
     get_lesson_drafts: GetLessonDrafts,
@@ -248,7 +250,7 @@ def create_drafts_router(
         draft, used_fallback = result
         upsert_lesson_drafts(db, lesson, outline, [draft])
         db.commit()
-        redirect_to = sanitize_next_path(return_to) or f"/lessons/{lesson.id}/drafts"
+        redirect_to, _return_to_invalid = resolve_return_to_path(return_to, f"/lessons/{lesson.id}/drafts")
         redirect_to = _append_fallback_reason(redirect_to, used_fallback, getattr(result, "fallback_reason", None))
         return RedirectResponse(url=redirect_to, status_code=303)
 
@@ -272,7 +274,7 @@ def create_drafts_router(
         outline = get_latest_knowledge_outline(db, lesson.id)
         if outline is None:
             return RedirectResponse(
-                url=sanitize_next_path(return_to) or f"/lessons/{lesson.id}/drafts",
+                url=resolve_return_to_path(return_to, f"/lessons/{lesson.id}/drafts")[0],
                 status_code=303,
             )
 
@@ -284,7 +286,7 @@ def create_drafts_router(
             mid_guide is not None,
         )
         if dependency_message:
-            redirect_to = sanitize_next_path(return_to) or f"/lessons/{lesson.id}/drafts"
+            redirect_to, _return_to_invalid = resolve_return_to_path(return_to, f"/lessons/{lesson.id}/drafts")
             return RedirectResponse(
                 url=append_query_param(redirect_to, "dependency_message", dependency_message),
                 status_code=303,
@@ -320,7 +322,7 @@ def create_drafts_router(
         draft, used_fallback = result
         upsert_lesson_drafts(db, lesson, outline, [draft])
         db.commit()
-        redirect_to = sanitize_next_path(return_to) or f"/lessons/{lesson.id}/drafts"
+        redirect_to, _return_to_invalid = resolve_return_to_path(return_to, f"/lessons/{lesson.id}/drafts")
         redirect_to = _append_fallback_reason(redirect_to, used_fallback, getattr(result, "fallback_reason", None))
         return RedirectResponse(url=redirect_to, status_code=303)
 
@@ -343,6 +345,7 @@ def create_drafts_router(
         draft.content = content.strip()
         draft.status = "reviewed"
         db.commit()
-        return RedirectResponse(url=sanitize_next_path(return_to) or f"/lessons/{lesson_id}/drafts", status_code=303)
+        redirect_to, _return_to_invalid = resolve_return_to_path(return_to, f"/lessons/{lesson_id}/drafts")
+        return RedirectResponse(url=redirect_to, status_code=303)
 
     return router

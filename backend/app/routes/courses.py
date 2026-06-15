@@ -21,11 +21,13 @@ from app.services.course_management_service import (
 )
 
 SanitizeNextPath = Callable[[str | None], str | None]
+ResolveReturnToPath = Callable[[str | None, str], tuple[str, bool]]
 
 
 def create_courses_router(
     templates: Jinja2Templates,
     sanitize_next_path: SanitizeNextPath,
+    resolve_return_to_path: ResolveReturnToPath,
 ) -> APIRouter:
     """创建课程管理路由，复用 main.py 中已有公共依赖。"""
 
@@ -48,6 +50,24 @@ def create_courses_router(
             .group_by(Lesson.course_id)
         ).all()
         return {course_id: count for course_id, count in rows}
+
+    def _courses_template_context(
+        db: Session,
+        courses: list[Course],
+        template_name: str,
+        error_message: str | None,
+        return_to_invalid: bool = False,
+    ) -> dict[str, object]:
+        """构造课程页上下文。"""
+
+        context: dict[str, object] = {
+            "courses": courses,
+            "error_message": error_message,
+            "return_to_invalid": return_to_invalid,
+        }
+        if template_name == "courses_v2.html":
+            context["lesson_counts"] = _course_lesson_counts(db, courses)
+        return context
 
     @router.get("/")
     async def read_root() -> RedirectResponse:
@@ -92,19 +112,16 @@ def create_courses_router(
     ) -> Response:
         """创建课程并返回课程中心。"""
 
-        redirect_to = sanitize_next_path(return_to) or "/courses"
+        redirect_to, return_to_invalid = resolve_return_to_path(return_to, "/courses")
         try:
             create_course(db, title)
         except ValueError as exc:
             courses = db.scalars(select(Course).order_by(Course.id)).all()
-            template_name = "courses_v2.html" if redirect_to == "/ui-v2/courses" else "courses.html"
-            context: dict[str, object] = {"courses": courses, "error_message": str(exc)}
-            if template_name == "courses_v2.html":
-                context["lesson_counts"] = _course_lesson_counts(db, courses)
+            template_name = "courses_v2.html" if redirect_to.split("?", 1)[0] == "/ui-v2/courses" else "courses.html"
             return templates.TemplateResponse(
                 request,
                 template_name,
-                context,
+                _courses_template_context(db, courses, template_name, str(exc), return_to_invalid),
                 status_code=400,
             )
         return RedirectResponse(url=redirect_to, status_code=303)
@@ -119,7 +136,7 @@ def create_courses_router(
     ) -> Response:
         """修改课程名称。"""
 
-        redirect_to = sanitize_next_path(return_to) or "/courses"
+        redirect_to, return_to_invalid = resolve_return_to_path(return_to, "/courses")
         course = db.get(Course, course_id)
         if course is None:
             raise HTTPException(status_code=404, detail="课程不存在")
@@ -128,14 +145,11 @@ def create_courses_router(
             rename_course(db, course, title)
         except ValueError as exc:
             courses = db.scalars(select(Course).order_by(Course.id)).all()
-            template_name = "courses_v2.html" if redirect_to == "/ui-v2/courses" else "courses.html"
-            context = {"courses": courses, "error_message": str(exc)}
-            if template_name == "courses_v2.html":
-                context["lesson_counts"] = _course_lesson_counts(db, courses)
+            template_name = "courses_v2.html" if redirect_to.split("?", 1)[0] == "/ui-v2/courses" else "courses.html"
             return templates.TemplateResponse(
                 request,
                 template_name,
-                context,
+                _courses_template_context(db, courses, template_name, str(exc), return_to_invalid),
                 status_code=400,
             )
         return RedirectResponse(url=redirect_to, status_code=303)
@@ -153,6 +167,7 @@ def create_courses_router(
             raise HTTPException(status_code=404, detail="课程不存在")
 
         delete_course(db, course)
-        return RedirectResponse(url=sanitize_next_path(return_to) or "/courses", status_code=303)
+        redirect_to, _return_to_invalid = resolve_return_to_path(return_to, "/courses")
+        return RedirectResponse(url=redirect_to, status_code=303)
 
     return router

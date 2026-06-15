@@ -20,12 +20,14 @@ from app.models.course_plan import CoursePlanUpload, PlannedLesson
 from app.services.course_plan.import_service import create_lessons_from_confirmed_planned_lessons, import_course_plan
 
 SanitizeNextPath = Callable[[str | None], str | None]
+ResolveReturnToPath = Callable[[str | None, str], tuple[str, bool]]
 GetUploadDir = Callable[[], Path]
 
 
 def create_course_plans_router(
     templates: Jinja2Templates,
     sanitize_next_path: SanitizeNextPath,
+    resolve_return_to_path: ResolveReturnToPath,
     get_course_plan_upload_dir: GetUploadDir,
 ) -> APIRouter:
     """创建授课计划上传路由，复用 main.py 中已有公共依赖。"""
@@ -37,14 +39,16 @@ def create_course_plans_router(
         course_id: int,
         request: Request,
         db: Session = Depends(get_db),
-    ) -> HTMLResponse:
+    ) -> Response:
         """显示授课计划上传表单。"""
 
         course = db.get(Course, course_id)
         if course is None:
             raise HTTPException(status_code=404, detail="课程不存在")
 
-        return_to = sanitize_next_path(request.query_params.get("return_to")) or "/courses"
+        return_to, return_to_invalid = resolve_return_to_path(request.query_params.get("return_to"), "/courses")
+        if return_to_invalid:
+            return RedirectResponse(url=return_to, status_code=303)
         return templates.TemplateResponse(
             request,
             "course_plan_upload.html",
@@ -65,8 +69,10 @@ def create_course_plans_router(
         if course is None:
             raise HTTPException(status_code=404, detail="课程不存在")
 
-        safe_return_to = sanitize_next_path(return_to) or "/courses"
+        safe_return_to, return_to_invalid = resolve_return_to_path(return_to, "/courses")
         if not file.filename or not file.filename.lower().endswith(".xlsx"):
+            if return_to_invalid:
+                return RedirectResponse(url=safe_return_to, status_code=303)
             return templates.TemplateResponse(
                 request,
                 "course_plan_upload.html",
@@ -89,6 +95,8 @@ def create_course_plans_router(
 
         result = import_course_plan(db, course, saved_path, safe_filename)
         upload = result["upload"]
+        if return_to_invalid:
+            return RedirectResponse(url=safe_return_to, status_code=303)
         preview_url = f"/course-plan-uploads/{upload.id}"
         if safe_return_to != "/courses":
             preview_url = f"{preview_url}?return_to={quote(safe_return_to, safe='')}"
@@ -99,7 +107,7 @@ def create_course_plans_router(
         upload_id: int,
         request: Request,
         db: Session = Depends(get_db),
-    ) -> HTMLResponse:
+    ) -> Response:
         """显示授课计划导入结果和 planned lessons 只读预览。"""
 
         upload = db.scalar(
@@ -115,7 +123,9 @@ def create_course_plans_router(
             .where(PlannedLesson.course_plan_upload_id == upload.id)
             .order_by(PlannedLesson.id)
         ).all()
-        return_to = sanitize_next_path(request.query_params.get("return_to")) or "/courses"
+        return_to, return_to_invalid = resolve_return_to_path(request.query_params.get("return_to"), "/courses")
+        if return_to_invalid:
+            return RedirectResponse(url=return_to, status_code=303)
 
         return templates.TemplateResponse(
             request,

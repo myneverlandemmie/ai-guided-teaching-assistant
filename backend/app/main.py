@@ -57,6 +57,9 @@ MATERIAL_TYPE_LABELS = {
 LESSON_STATUS_LABELS = {"draft": "草稿", "published": "已发布", "archived": "已归档"}
 KNOWLEDGE_OUTLINE_STATUS_LABELS = {"draft": "草稿", "reviewed": "已复核", "published": "已发布"}
 LESSON_DRAFT_STATUS_LABELS = {"draft": "草稿", "reviewed": "已复核"}
+RETURN_TO_INVALID_FALLBACK_PATH = "/ui-v2/courses"
+RETURN_TO_INVALID_QUERY_PARAM = "return_to_invalid"
+RETURN_TO_INVALID_QUERY_VALUE = "1"
 LESSON_DRAFT_DOWNLOAD_NAME_PARTS = {
     "guide_low": "core_learning_guide",
     "guide_mid": "enhancement_task_pack",
@@ -111,6 +114,36 @@ def sanitize_next_path(next_path: str | None) -> str | None:
     if parsed_next.scheme or parsed_next.netloc:
         return None
     return next_path
+
+
+def sanitize_next_path_with_status(
+    next_path: str | None,
+    default: str,
+    invalid_default: str | None = None,
+) -> tuple[str, bool]:
+    """清洗返回路径，并标记非空输入是否非法。"""
+
+    if not next_path:
+        return default, False
+
+    safe_path = sanitize_next_path(next_path)
+    if safe_path is not None:
+        return safe_path, False
+    return invalid_default or default, True
+
+
+def resolve_return_to_path(return_to: str | None, default: str) -> tuple[str, bool]:
+    """清洗 return_to；非法时回退到课程中心并追加安全提示标记。"""
+
+    safe_path, was_invalid = sanitize_next_path_with_status(
+        return_to,
+        default,
+        RETURN_TO_INVALID_FALLBACK_PATH,
+    )
+    if was_invalid:
+        separator = "&" if "?" in safe_path else "?"
+        safe_path = f"{safe_path}{separator}{RETURN_TO_INVALID_QUERY_PARAM}={RETURN_TO_INVALID_QUERY_VALUE}"
+    return safe_path, was_invalid
 
 
 def require_same_origin(request: Request) -> None:
@@ -289,8 +322,10 @@ def _diagnostic_probe_view_context(draft: LessonDraft | None) -> dict[str, objec
 
 
 app.include_router(create_ai_settings_router(templates, sanitize_next_path, require_same_origin))
-app.include_router(create_courses_router(templates, sanitize_next_path))
-app.include_router(create_course_plans_router(templates, sanitize_next_path, lambda: COURSE_PLAN_UPLOAD_DIR))
+app.include_router(create_courses_router(templates, sanitize_next_path, resolve_return_to_path))
+app.include_router(
+    create_course_plans_router(templates, sanitize_next_path, resolve_return_to_path, lambda: COURSE_PLAN_UPLOAD_DIR)
+)
 app.include_router(
     create_lessons_router(
         templates,
@@ -304,6 +339,7 @@ app.include_router(
     create_materials_router(
         templates,
         sanitize_next_path,
+        resolve_return_to_path,
         _get_latest_knowledge_outline,
         _get_lesson_draft_by_type,
         lambda: LESSON_MATERIAL_UPLOAD_DIR,
@@ -320,6 +356,7 @@ app.include_router(
     create_outlines_router(
         templates,
         sanitize_next_path,
+        resolve_return_to_path,
         require_same_origin,
         lambda func, *args, **kwargs: run_in_threadpool(func, *args, **kwargs),
         _get_latest_knowledge_outline,
@@ -335,6 +372,7 @@ app.include_router(
     create_drafts_router(
         templates,
         sanitize_next_path,
+        resolve_return_to_path,
         lambda func, *args, **kwargs: run_in_threadpool(func, *args, **kwargs),
         _get_latest_knowledge_outline,
         _get_lesson_drafts,
@@ -351,6 +389,7 @@ app.include_router(
 app.include_router(
     create_exports_router(
         sanitize_next_path,
+        resolve_return_to_path,
         _safe_export_part,
         _safe_export_filename,
         _append_query_param,

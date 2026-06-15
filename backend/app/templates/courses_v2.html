@@ -53,6 +53,10 @@
     <span class="planned-badge-v2" aria-disabled="true">规划中</span>
   </section>
 
+  {% if return_to_invalid or request.query_params.get("return_to_invalid") == "1" %}
+    <p class="notice return-to-invalid-notice">返回地址无效，已返回课程中心。</p>
+  {% endif %}
+
   {% if error_message %}
     <section class="course-alert-v2">
       <p>{{ error_message }}</p>

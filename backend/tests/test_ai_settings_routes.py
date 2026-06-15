@@ -136,6 +136,14 @@ def test_ai_settings_next_path_sanitizer() -> None:
     assert main.sanitize_next_path("/lessons/1\rLocation: http://evil.com") is None
     assert main.sanitize_next_path("lessons/1") is None
     assert main.sanitize_next_path("") is None
+    assert main.sanitize_next_path_with_status("/ui-v2/courses", "/courses") == ("/ui-v2/courses", False)
+    assert main.sanitize_next_path_with_status("", "/courses") == ("/courses", False)
+    assert main.sanitize_next_path_with_status("https://evil.com", "/courses") == ("/courses", True)
+    assert main.resolve_return_to_path("https://evil.example/path", "/lessons/1") == (
+        "/ui-v2/courses?return_to_invalid=1",
+        True,
+    )
+    assert main.resolve_return_to_path("/ui-v2/courses", "/lessons/1") == ("/ui-v2/courses", False)
 
 
 @pytest.mark.anyio

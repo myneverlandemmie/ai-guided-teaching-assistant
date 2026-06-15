@@ -268,6 +268,10 @@ async def test_material_post_with_return_to_redirects_back_to_v2(tmp_path: Path)
 
         assert response.status_code == 303
         assert response.headers["location"] == return_to
+        page = await client.get(response.headers["location"])
+        assert page.status_code == 200
+        assert "返回地址无效，已返回课程中心。" not in page.text
+        assert "return-to-invalid-notice" not in page.text
         with session_factory() as session:
             material = session.query(LessonMaterial).filter(LessonMaterial.lesson_id == lesson_id).order_by(LessonMaterial.id.desc()).first()
             assert material is not None
@@ -278,8 +282,19 @@ async def test_material_post_with_return_to_redirects_back_to_v2(tmp_path: Path)
         main.app.dependency_overrides.clear()
 
 
+@pytest.mark.parametrize(
+    "unsafe_return_to",
+    [
+        "https://evil.example/path",
+        "//evil.example/path",
+        "/\\evil",
+    ],
+)
 @pytest.mark.anyio
-async def test_material_post_rejects_external_return_to_and_keeps_legacy_default(tmp_path: Path) -> None:
+async def test_material_post_rejects_invalid_return_to_and_shows_course_center_notice(
+    tmp_path: Path,
+    unsafe_return_to: str,
+) -> None:
     client, session_factory = _build_test_client(tmp_path)
     lesson_id = _create_lesson(session_factory)
     try:
@@ -289,12 +304,20 @@ async def test_material_post_rejects_external_return_to_and_keeps_legacy_default
                 "material_type": "pasted_text",
                 "title": "补充说明",
                 "content": "课堂补充说明",
-                "return_to": "https://evil.example/path",
+                "return_to": unsafe_return_to,
             },
         )
 
         assert response.status_code == 303
-        assert response.headers["location"] == f"/lessons/{lesson_id}"
+        assert response.headers["location"] == "/ui-v2/courses?return_to_invalid=1"
+        assert "evil.example" not in response.headers["location"]
+        assert "\\evil" not in response.headers["location"]
+        page = await client.get(response.headers["location"])
+        assert page.status_code == 200
+        assert "返回地址无效，已返回课程中心。" in page.text
+        assert '<p class="notice return-to-invalid-notice">返回地址无效，已返回课程中心。</p>' in page.text
+        assert "evil.example" not in page.text
+        assert "\\evil" not in page.text
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()

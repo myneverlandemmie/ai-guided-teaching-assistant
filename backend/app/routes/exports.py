@@ -21,6 +21,7 @@ from app.services.exports.docx_exporter import (
 )
 
 SanitizeNextPath = Callable[[str | None], str | None]
+ResolveReturnToPath = Callable[[str | None, str], tuple[str, bool]]
 SafeExportPart = Callable[[str | None, str], str]
 SafeExportFilename = Callable[[str | None, str], str | None]
 AppendQueryParam = Callable[[str, str, str], str]
@@ -29,6 +30,7 @@ GetExportDir = Callable[[], Path]
 
 def create_exports_router(
     sanitize_next_path: SanitizeNextPath,
+    resolve_return_to_path: ResolveReturnToPath,
     safe_export_part: SafeExportPart,
     safe_export_filename: SafeExportFilename,
     append_query_param: AppendQueryParam,
@@ -63,7 +65,7 @@ def create_exports_router(
         filename = f"lesson_{lesson.id}_{lesson_part}_diagnostic_probe.xlsx"
         output_path = chaoxing_export_dir / filename
         write_chaoxing_template_xlsx(lesson, draft, output_path)
-        redirect_to = sanitize_next_path(return_to) or f"/lessons/{lesson.id}/drafts"
+        redirect_to, _return_to_invalid = resolve_return_to_path(return_to, f"/lessons/{lesson.id}/drafts")
         return RedirectResponse(url=append_query_param(redirect_to, "chaoxing_file", filename), status_code=303)
 
     @router.get("/exports/chaoxing/{filename}")

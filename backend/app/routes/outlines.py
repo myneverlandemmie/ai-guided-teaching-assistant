@@ -33,6 +33,7 @@ from app.services.ai.session_key_store import (
 from app.services.teaching_prep_reference_service import TEACHING_PREP_REFERENCE_DRAFT_TYPE
 
 SanitizeNextPath = Callable[[str | None], str | None]
+ResolveReturnToPath = Callable[[str | None, str], tuple[str, bool]]
 RequireSameOrigin = Callable[[Request], None]
 GetLatestKnowledgeOutline = Callable[[Session, int], KnowledgeOutline | None]
 GetLessonDraftByType = Callable[[Session, int, str], LessonDraft | None]
@@ -43,6 +44,7 @@ RunInThreadpool = Callable[..., Awaitable[object]]
 def create_outlines_router(
     templates: Jinja2Templates,
     sanitize_next_path: SanitizeNextPath,
+    resolve_return_to_path: ResolveReturnToPath,
     require_same_origin: RequireSameOrigin,
     run_in_threadpool_func: RunInThreadpool,
     get_latest_knowledge_outline: GetLatestKnowledgeOutline,
@@ -75,7 +77,7 @@ def create_outlines_router(
         """使用当前 AI Provider 为课次生成知识主干初稿。"""
 
         require_same_origin(request)
-        redirect_to = sanitize_next_path(return_to) or f"/lessons/{lesson_id}/knowledge-outline"
+        redirect_to, return_to_invalid = resolve_return_to_path(return_to, f"/lessons/{lesson_id}/knowledge-outline")
         lesson = db.get(Lesson, lesson_id)
         if lesson is None:
             raise HTTPException(status_code=404, detail="课次不存在")
@@ -110,7 +112,7 @@ def create_outlines_router(
                     FALLBACK_REASON_PROVIDER_ERROR,
                 )
             else:
-                if redirect_to.startswith("/ui-v2/"):
+                if not return_to_invalid and redirect_to.startswith("/ui-v2/"):
                     materials = db.scalars(
                         select(LessonMaterial)
                         .where(LessonMaterial.lesson_id == lesson.id)
@@ -213,7 +215,7 @@ def create_outlines_router(
         outline.status = "reviewed"
         db.commit()
         return RedirectResponse(
-            url=sanitize_next_path(return_to) or f"/lessons/{outline.lesson_id}/knowledge-outline",
+            url=resolve_return_to_path(return_to, f"/lessons/{outline.lesson_id}/knowledge-outline")[0],
             status_code=303,
         )
 
