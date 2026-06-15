@@ -34,6 +34,9 @@
     {% if chaoxing_export_url %}
       <p class="alert">学习通题库模板已生成：<a class="download-link" href="{{ chaoxing_export_url }}">下载学习通题库模板</a></p>
     {% endif %}
+    {% if request.query_params.get("chaoxing_export_error") == "1" %}
+      <p class="error chaoxing-export-error">习题文件导出失败，请检查题卡内容后重试。</p>
+    {% endif %}
     {% if fallback_message %}
       <p class="notice ai-fallback-notice">{{ fallback_message }}</p>
     {% endif %}

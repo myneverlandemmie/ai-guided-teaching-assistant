@@ -11,6 +11,7 @@ from app import main
 from app.models.course import Course
 from app.models.lesson import Lesson
 from app.models.lesson_draft import LessonDraft
+from app.routes import exports as exports_routes
 from app.services.ai.lesson_draft_service import build_chaoxing_catalog
 from tests.support.course_plan_helpers import (
     _build_test_client,
@@ -148,6 +149,51 @@ async def test_diagnostic_probe_exports_chaoxing_template(tmp_path: Path) -> Non
         main.app.dependency_overrides.clear()
 
 
+@pytest.mark.anyio
+async def test_chaoxing_export_write_failure_shows_friendly_message(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _create_first_lesson(client, session_factory, course)
+        _create_reviewed_outline(session_factory)
+        await client.post("/lessons/1/drafts/generate/diagnostic_probe", follow_redirects=False)
+        with session_factory() as session:
+            draft = session.scalar(select(LessonDraft).where(LessonDraft.draft_type == "diagnostic_probe"))
+            assert draft is not None
+            draft_id = draft.id
+
+        def fail_write_chaoxing_template_xlsx(*args: object, **kwargs: object) -> None:
+            raise OSError("xlsx write failed at /home/emma/projects/private/export.xlsx")
+
+        monkeypatch.setattr(
+            exports_routes,
+            "write_chaoxing_template_xlsx",
+            fail_write_chaoxing_template_xlsx,
+        )
+        return_to = "/ui-v2/lessons/1/diagnostic-probe"
+        export_response = await client.post(
+            f"/lessons/1/drafts/{draft_id}/export-chaoxing",
+            data={"return_to": return_to},
+            follow_redirects=False,
+        )
+
+        assert export_response.status_code == 303
+        assert export_response.headers["location"] == f"{return_to}?chaoxing_export_error=1"
+        page_response = await client.get(export_response.headers["location"])
+        assert page_response.status_code == 200
+        assert "习题文件导出失败，请检查题卡内容后重试。" in page_response.text
+        assert "xlsx write failed" not in page_response.text
+        assert "/home/" not in page_response.text
+        assert "Traceback" not in page_response.text
+        assert not list((tmp_path / "exports" / "chaoxing").glob("*.xlsx"))
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
 def test_chaoxing_catalog_falls_back_without_course_name() -> None:
     lesson = Lesson(
         id=1,
@@ -192,6 +238,42 @@ async def test_guide_low_can_download_markdown(tmp_path: Path) -> None:
         markdown_file = tmp_path / "exports" / "guides" / "lesson_1_core_learning_guide.md"
         assert markdown_file.exists()
         assert markdown_file.read_text(encoding="utf-8") == expected_content
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
+async def test_markdown_download_write_failure_shows_friendly_message(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _create_first_lesson(client, session_factory, course)
+        _create_reviewed_outline(session_factory)
+        await client.post("/lessons/1/drafts/generate/guide_low", follow_redirects=False)
+        with session_factory() as session:
+            draft = session.scalar(select(LessonDraft).where(LessonDraft.draft_type == "guide_low"))
+            assert draft is not None
+            draft_id = draft.id
+
+        original_write_text = Path.write_text
+
+        def fail_markdown_write(self: Path, data: str, *args: object, **kwargs: object) -> int:
+            if self.suffix == ".md":
+                raise PermissionError("cannot write /home/emma/projects/private/guide.md")
+            return original_write_text(self, data, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "write_text", fail_markdown_write)
+        response = await client.get(f"/lessons/1/drafts/{draft_id}/download-md")
+
+        assert response.status_code == 503
+        assert "下载文件生成失败，请重新生成或稍后再试。" in response.text
+        assert "cannot write" not in response.text
+        assert "/home/" not in response.text
+        assert "Traceback" not in response.text
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
@@ -363,6 +445,38 @@ async def test_guide_low_can_download_docx_with_basic_markdown(tmp_path: Path) -
 
 
 @pytest.mark.anyio
+async def test_docx_download_exporter_failure_shows_friendly_message(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        await _create_first_lesson(client, session_factory, course)
+        _create_reviewed_outline(session_factory)
+        await client.post("/lessons/1/drafts/generate/guide_low", follow_redirects=False)
+        with session_factory() as session:
+            draft = session.scalar(select(LessonDraft).where(LessonDraft.draft_type == "guide_low"))
+            assert draft is not None
+            draft_id = draft.id
+
+        def fail_build_lesson_draft_docx(*args: object, **kwargs: object) -> bytes:
+            raise RuntimeError("docx build failed at /home/emma/projects/private/export.docx")
+
+        monkeypatch.setattr(exports_routes, "build_lesson_draft_docx", fail_build_lesson_draft_docx)
+        response = await client.get(f"/lessons/1/drafts/{draft_id}/download-docx")
+
+        assert response.status_code == 503
+        assert "下载文件生成失败，请重新生成或稍后再试。" in response.text
+        assert "docx build failed" not in response.text
+        assert "/home/" not in response.text
+        assert "Traceback" not in response.text
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
 async def test_docx_download_empty_draft_shows_friendly_message(tmp_path: Path) -> None:
     client, session_factory = _build_test_client(tmp_path)
     course = _create_course(session_factory)
@@ -385,7 +499,7 @@ async def test_docx_download_empty_draft_shows_friendly_message(tmp_path: Path) 
         response = await client.get(f"/lessons/1/drafts/{draft_id}/download-docx")
 
         assert response.status_code == 400
-        assert "DOCX 文件生成失败，请重新生成或稍后再试。" in response.text
+        assert "下载文件生成失败，请重新生成或稍后再试。" in response.text
         assert "Traceback" not in response.text
         assert "/home/" not in response.text
     finally:

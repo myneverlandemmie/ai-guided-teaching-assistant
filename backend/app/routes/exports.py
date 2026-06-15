@@ -14,7 +14,6 @@ from app.models.lesson import Lesson
 from app.models.lesson_draft import LessonDraft
 from app.services.ai.lesson_draft_service import write_chaoxing_template_xlsx
 from app.services.exports.docx_exporter import (
-    DOCX_EXPORT_ERROR_MESSAGE,
     DOCX_MIME_TYPE,
     DocxExportError,
     build_lesson_draft_docx,
@@ -26,6 +25,9 @@ SafeExportPart = Callable[[str | None, str], str]
 SafeExportFilename = Callable[[str | None, str], str | None]
 AppendQueryParam = Callable[[str, str, str], str]
 GetExportDir = Callable[[], Path]
+
+DOWNLOAD_ERROR_MESSAGE = "下载文件生成失败，请重新生成或稍后再试。"
+CHAOXING_EXPORT_ERROR_QUERY_PARAM = "chaoxing_export_error"
 
 
 def create_exports_router(
@@ -59,13 +61,19 @@ def create_exports_router(
         if draft.draft_type != "diagnostic_probe":
             raise HTTPException(status_code=400, detail="只有导学案前测可以导出学习通题库模板")
 
-        chaoxing_export_dir = get_chaoxing_export_dir()
-        chaoxing_export_dir.mkdir(parents=True, exist_ok=True)
-        lesson_part = safe_export_part(lesson.lesson_code, str(lesson.id))
-        filename = f"lesson_{lesson.id}_{lesson_part}_diagnostic_probe.xlsx"
-        output_path = chaoxing_export_dir / filename
-        write_chaoxing_template_xlsx(lesson, draft, output_path)
         redirect_to, _return_to_invalid = resolve_return_to_path(return_to, f"/lessons/{lesson.id}/drafts")
+        try:
+            chaoxing_export_dir = get_chaoxing_export_dir()
+            chaoxing_export_dir.mkdir(parents=True, exist_ok=True)
+            lesson_part = safe_export_part(lesson.lesson_code, str(lesson.id))
+            filename = f"lesson_{lesson.id}_{lesson_part}_diagnostic_probe.xlsx"
+            output_path = chaoxing_export_dir / filename
+            write_chaoxing_template_xlsx(lesson, draft, output_path)
+        except Exception:
+            return RedirectResponse(
+                url=append_query_param(redirect_to, CHAOXING_EXPORT_ERROR_QUERY_PARAM, "1"),
+                status_code=303,
+            )
         return RedirectResponse(url=append_query_param(redirect_to, "chaoxing_file", filename), status_code=303)
 
     @router.get("/exports/chaoxing/{filename}")
@@ -100,17 +108,20 @@ def create_exports_router(
         if draft.draft_type not in downloadable_types:
             raise HTTPException(status_code=400, detail="只有导学案或备课参考建议草稿可以下载 Markdown")
 
-        guide_export_dir = get_guide_export_dir()
-        guide_export_dir.mkdir(parents=True, exist_ok=True)
-        filename_part = lesson_draft_download_name_parts.get(draft.draft_type, "learning_draft")
-        filename = f"lesson_{lesson.id}_{filename_part}.md"
-        output_path = guide_export_dir / filename
-        output_path.write_text(draft.content, encoding="utf-8")
-        return Response(
-            content=draft.content,
-            media_type="text/markdown; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-        )
+        try:
+            guide_export_dir = get_guide_export_dir()
+            guide_export_dir.mkdir(parents=True, exist_ok=True)
+            filename_part = lesson_draft_download_name_parts.get(draft.draft_type, "learning_draft")
+            filename = f"lesson_{lesson.id}_{filename_part}.md"
+            output_path = guide_export_dir / filename
+            output_path.write_text(draft.content, encoding="utf-8")
+            return Response(
+                content=draft.content,
+                media_type="text/markdown; charset=utf-8",
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
+        except Exception:
+            return _friendly_export_error(DOWNLOAD_ERROR_MESSAGE, 503)
 
     @router.get("/lessons/{lesson_id}/drafts/{draft_id}/download-docx")
     async def download_lesson_draft_docx(
@@ -128,25 +139,24 @@ def create_exports_router(
         if draft.draft_type not in downloadable_types:
             return _friendly_export_error("只有导学案或备课参考建议草稿可以下载 DOCX", 400)
 
-        filename_part = lesson_draft_download_name_parts.get(draft.draft_type, "learning_draft")
-        lesson_part = _ascii_export_part(safe_export_part(lesson.lesson_code, str(lesson.id)), str(lesson.id))
-        filename = f"lesson_{lesson.id}_{lesson_part}_{filename_part}.docx"
         try:
+            filename_part = lesson_draft_download_name_parts.get(draft.draft_type, "learning_draft")
+            lesson_part = _ascii_export_part(safe_export_part(lesson.lesson_code, str(lesson.id)), str(lesson.id))
+            filename = f"lesson_{lesson.id}_{lesson_part}_{filename_part}.docx"
             docx_content = build_lesson_draft_docx(lesson, draft)
             guide_export_dir = get_guide_export_dir()
             guide_export_dir.mkdir(parents=True, exist_ok=True)
             output_path = guide_export_dir / filename
             output_path.write_bytes(docx_content)
+            return Response(
+                content=docx_content,
+                media_type=DOCX_MIME_TYPE,
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
         except DocxExportError:
-            return _friendly_export_error(DOCX_EXPORT_ERROR_MESSAGE, 400)
+            return _friendly_export_error(DOWNLOAD_ERROR_MESSAGE, 400)
         except Exception:
-            return _friendly_export_error(DOCX_EXPORT_ERROR_MESSAGE, 503)
-
-        return Response(
-            content=docx_content,
-            media_type=DOCX_MIME_TYPE,
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-        )
+            return _friendly_export_error(DOWNLOAD_ERROR_MESSAGE, 503)
 
     return router
 

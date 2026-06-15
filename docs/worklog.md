@@ -226,3 +226,20 @@
 - 风险点：非法 `return_to` 现在统一回 V2 课程中心提示；这符合本轮目标文案，但部分 legacy route 的非法返回不再停留在原 legacy 默认页。合法 return_to 与空 return_to 未改变。
 - 下一轮建议：继续按 Phase 2 审计小步处理，优先单独安排导出 / 下载失败中文提示，不要与 return_to 或 AI fallback 混合。
 - 提交状态：未 commit，未 push。
+
+### 2026-06-15 09:23 +08｜Phase 2.5：导出与下载失败中文提示
+
+- 日期时间：2026-06-15 09:23 +08
+- 本轮目标：只处理学习通导出失败、Markdown 下载失败和 DOCX 下载失败的教师可见中文提示；不处理 return_to、上传、AI fallback、账号体系、部署或全局异常页面。
+- 本轮修改范围：`backend/app/routes/exports.py`、`backend/app/templates/diagnostic_probe_v2.html`、`backend/app/templates/lesson_drafts.html`、`backend/tests/test_exports_routes.py`、`docs/worklog.md`。
+- 学习通导出失败提示：在 `export-chaoxing` route 中捕获导出目录创建、文件名生成、xlsx 生成 / 写出等异常；失败时不抛 500，重定向回安全 `return_to` 或默认草稿页，并追加短标记 `chaoxing_export_error=1`；V2 前测页和 legacy 草稿页显示“习题文件导出失败，请检查题卡内容后重试。”。
+- Markdown / DOCX 下载失败提示：Markdown 下载捕获导出目录创建、`.md` 写入和响应准备异常；DOCX 下载捕获 exporter、目录创建、`.docx` 写入和响应准备异常；失败时返回固定中文纯文本“下载文件生成失败，请重新生成或稍后再试。”，不展示底层异常。
+- 成功路径保持情况：学习通导出成功仍追加 `chaoxing_file` 并显示原下载入口；Markdown 成功仍返回 `.md`、原正文和 `text/markdown`；DOCX 成功仍返回 `.docx`、原 MIME 和原落盘文件名；未改变数据库结构、上传逻辑、AI 生成逻辑或 DOCX Markdown 样式转换能力。
+- 新增或调整测试：新增 `test_chaoxing_export_write_failure_shows_friendly_message`、`test_markdown_download_write_failure_shows_friendly_message`、`test_docx_download_exporter_failure_shows_friendly_message`；调整空 DOCX 草稿失败提示为统一下载失败文案；保留学习通导出、Markdown 下载和 DOCX 下载成功路径测试。
+- pytest collect-only 结果：施工前 `170 tests collected in 1.37s`；施工后 `173 tests collected in 0.70s`，比施工前增加 3 个失败路径测试。
+- 完整 pytest 结果：施工前 `170 passed in 33.56s`；施工后 `173 passed in 35.20s`。
+- `git diff --check` 结果：已运行，结果无输出。
+- 未完成事项：未做浏览器人工页面验收；未处理授课计划上传大小限制、return_to、AI fallback、上传格式、账号体系、部署或全局异常页面；未处理学习通导出文件下载 404 的页面化体验。
+- 风险点：Markdown / DOCX 下载失败为直接下载 GET 请求，当前返回纯文本友好响应而不是回推来源页；这避免来源页猜测，但建议人工点击一次确认浏览器展示体验可接受。
+- 下一轮建议：如继续 Phase 2，可单独处理授课计划上传大小限制或导出文件下载 404 友好页；不要与 AI fallback 或上传格式混合。
+- 提交状态：未 commit，未 push。
