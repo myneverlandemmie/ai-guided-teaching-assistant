@@ -261,3 +261,15 @@
 - 风险点：当前实现会先创建上传目录和目标文件，再按块写入并在超限时删除目标文件；目录可能保留为空目录，测试已覆盖无失败文件残留。建议人工在授课计划上传页上传正常样例 `.xlsx`、非 `.xlsx` 和一个超限 `.xlsx`，确认页面提示和预览流程体验。
 - 下一轮建议：如继续 Phase 2，可单独处理学习通导出文件下载 404 的页面化体验；不要与上传、AI fallback 或 DOCX 样式混合。
 - 提交状态：未 commit，未 push。
+
+### 2026-06-15 11:52 +08｜v0.3 closing 文档收束
+
+- 日期时间：2026-06-15 11:52 +08
+- 本轮目标：只做 v0.3 closing 文档收束，为后续 push main 和打 `v0.3.0` tag 做准备；不修改业务代码、测试代码、模板、静态资源、数据库、上传文件、导出文件、依赖配置或启动 / 清理脚本。
+- 本轮修改范围：`README.md`、`docs/project_overview.md`、`docs/qa_checklist.md`、`docs/audit/v0.3_closing_audit.md`、`docs/worklog.md`。
+- 已完成内容：更新 README 至 v0.3 当前状态，补充项目定位、当前能力、v0.3 已完成重点、暂不支持 / 后续计划、安全与伦理边界、DOCX V0.1 边界和 `174 passed` 测试基线；更新项目总览至 v0.3 closing，记录 Phase 1、Phase 2、Day 12.1 和当前风险；更新 QA 清单，明确最终 pytest 命令、`174 passed` 预期和手工验收重点；新增 `docs/audit/v0.3_closing_audit.md`，记录 v0.3 收束范围、完成项、测试基线、保留边界和后续 v0.4-v0.7 建议。
+- 测试结果：已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `174 passed in 34.91s`；已运行 `git diff --check`，结果无输出。
+- 未完成 / 待确认：本轮未做浏览器人工页面验收；README 中“后续 push main 和打 v0.3.0 tag 做准备”的表述需由维护者确认是否符合最终发布节奏；DOCX V0.1 仍建议人工用 Word / WPS 打开代表性样例验收。
+- 风险点：本轮仅文档更新，未触碰业务实现；README 和项目总览已把 DOCX 描述为基础可编辑稿，避免误述为精排模板或完整 Markdown 转换。
+- 下一轮建议：人工复核 README 发布口径后，再按维护者节奏决定是否 push main 和打 `v0.3.0` tag。
+- 提交状态：未 commit，未 push。
