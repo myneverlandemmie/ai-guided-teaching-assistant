@@ -243,3 +243,21 @@
 - 风险点：Markdown / DOCX 下载失败为直接下载 GET 请求，当前返回纯文本友好响应而不是回推来源页；这避免来源页猜测，但建议人工点击一次确认浏览器展示体验可接受。
 - 下一轮建议：如继续 Phase 2，可单独处理授课计划上传大小限制或导出文件下载 404 友好页；不要与 AI fallback 或上传格式混合。
 - 提交状态：未 commit，未 push。
+
+### 2026-06-15 10:05 +08｜Phase 2.6：授课计划上传文件大小提示
+
+- 日期时间：2026-06-15 10:05 +08
+- 本轮目标：只处理授课计划 `.xlsx` 上传文件过大时的中文友好提示与失败清理；不处理课次资料上传、AI fallback、return_to、导出 / 下载失败、DOCX、账号体系、部署或全局异常页面。
+- 本轮修改范围：`backend/app/routes/course_plans.py`、`backend/tests/test_course_plans_routes.py`、`docs/worklog.md`；未修改 `backend/app/main.py`、`backend/app/routes/materials.py`、`backend/app/routes/outlines.py`、`backend/app/routes/drafts.py`、`backend/app/routes/exports.py`、AI service、lesson materials service、exports service、DOCX exporter、数据库模型、依赖配置、README、审计文档或 QA 清单。
+- 授课计划上传大小限制实现方式：在 `course_plans.py` 中新增 `MAX_COURSE_PLAN_UPLOAD_BYTES = 50 * 1024 * 1024`，上传保存改为 `_save_course_plan_upload_with_size_limit(...)` 分块读取和写入，每块 1 MiB，累计大小超过上限立即停止，不使用无上限 `shutil.copyfileobj`，也不先完整读取超大文件再判断。
+- 超限文件清理方式：超限时抛出内部 `CoursePlanUploadTooLargeError`，删除已创建的目标文件；route 返回上传页 400 和固定中文提示，不调用 `import_course_plan`，不创建 `CoursePlanUpload`、`PlannedLesson` 或正式 `Lesson` 记录。
+- 成功路径保持情况：合法 `.xlsx` 授课计划仍保存到运行时上传目录，继续调用原 `import_course_plan` 解析，预览页和确认生成正式课次流程保持不变；非 `.xlsx` 格式提示和合法 / 非法 `return_to` 现有测试保持通过。
+- 新增或调整测试：新增 `test_oversized_course_plan_upload_shows_hint_without_saving`，通过 monkeypatch 将上限降为 8 字节，上传 9 字节 `.xlsx` 名称文件，断言非 500、显示“文件过大，请拆分资料后上传。”、不进入正常预览、不展示服务器路径或 traceback、数据库无上传 / planned lesson / 正式课次记录、上传目录为空；增强 `test_preview_page_shows_import_result`，断言课程标题、课次编码和样例课次内容仍显示。
+- 施工前检查：`git status --short --branch` 为 `## phase2-course-plan-upload-size` 且工作区干净；`git log --oneline --decorate -6` 包含 `fix: show friendly export download errors`、`fix: show warning for invalid return_to`、`fix: unify ai fallback user messages`、`feat: add basic docx draft download`。
+- 施工前测试结果：已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest --collect-only -q`，结果 `173 tests collected in 1.34s`；已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `173 passed in 36.29s`。
+- 施工后测试结果：已运行 `PYTHONPATH=. ../.venv/bin/pytest -q tests/test_course_plans_routes.py`，结果 `8 passed in 3.93s`；已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest --collect-only -q`，结果 `174 tests collected in 0.74s`，比施工前增加 1 个测试；已运行 `cd backend && PYTHONPATH=. ../.venv/bin/pytest -q`，结果 `174 passed in 36.39s`。
+- `git diff --check` 结果：已运行，结果无输出。
+- 未完成事项：未做浏览器人工页面验收；未处理学习通导出文件下载 404 的页面化体验；未处理本轮禁止范围内的上传资料、AI fallback、return_to、导出 / 下载、DOCX、账号体系、部署或全局异常页面。
+- 风险点：当前实现会先创建上传目录和目标文件，再按块写入并在超限时删除目标文件；目录可能保留为空目录，测试已覆盖无失败文件残留。建议人工在授课计划上传页上传正常样例 `.xlsx`、非 `.xlsx` 和一个超限 `.xlsx`，确认页面提示和预览流程体验。
+- 下一轮建议：如继续 Phase 2，可单独处理学习通导出文件下载 404 的页面化体验；不要与上传、AI fallback 或 DOCX 样式混合。
+- 提交状态：未 commit，未 push。

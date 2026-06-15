@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import quote
@@ -22,6 +21,39 @@ from app.services.course_plan.import_service import create_lessons_from_confirme
 SanitizeNextPath = Callable[[str | None], str | None]
 ResolveReturnToPath = Callable[[str | None, str], tuple[str, bool]]
 GetUploadDir = Callable[[], Path]
+
+MAX_COURSE_PLAN_UPLOAD_BYTES = 50 * 1024 * 1024
+COURSE_PLAN_UPLOAD_TOO_LARGE_MESSAGE = "文件过大，请拆分资料后上传。"
+COURSE_PLAN_UPLOAD_CHUNK_BYTES = 1024 * 1024
+
+
+class CoursePlanUploadTooLargeError(ValueError):
+    """授课计划上传文件超过大小限制。"""
+
+
+async def _save_course_plan_upload_with_size_limit(uploaded_file: UploadFile, destination: Path) -> None:
+    """分块保存授课计划上传文件，超限时删除已写入内容。"""
+
+    total_size = 0
+    try:
+        await uploaded_file.seek(0)
+        with destination.open("wb") as output_file:
+            while True:
+                chunk = await uploaded_file.read(COURSE_PLAN_UPLOAD_CHUNK_BYTES)
+                if not chunk:
+                    break
+                total_size += len(chunk)
+                if total_size > MAX_COURSE_PLAN_UPLOAD_BYTES:
+                    raise CoursePlanUploadTooLargeError
+                output_file.write(chunk)
+    except CoursePlanUploadTooLargeError:
+        destination.unlink(missing_ok=True)
+        raise
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
+    finally:
+        await uploaded_file.seek(0)
 
 
 def create_course_plans_router(
@@ -90,8 +122,21 @@ def create_course_plans_router(
         saved_path = course_plan_upload_dir / f"{uuid4().hex}-{safe_filename}"
 
         # 上传文件只保存到运行时目录，目录已由 .gitignore 排除。
-        with saved_path.open("wb") as output_file:
-            shutil.copyfileobj(file.file, output_file)
+        try:
+            await _save_course_plan_upload_with_size_limit(file, saved_path)
+        except CoursePlanUploadTooLargeError:
+            if return_to_invalid:
+                return RedirectResponse(url=safe_return_to, status_code=303)
+            return templates.TemplateResponse(
+                request,
+                "course_plan_upload.html",
+                {
+                    "course": course,
+                    "error_message": COURSE_PLAN_UPLOAD_TOO_LARGE_MESSAGE,
+                    "return_to": safe_return_to,
+                },
+                status_code=400,
+            )
 
         result = import_course_plan(db, course, saved_path, safe_filename)
         upload = result["upload"]

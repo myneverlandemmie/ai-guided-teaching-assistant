@@ -6,6 +6,7 @@ from sqlalchemy import select
 from app import main
 from app.models.course_plan import CoursePlanUpload, PlannedLesson
 from app.models.lesson import Lesson
+from app.routes import course_plans as course_plans_routes
 from tests.support.course_plan_helpers import (
     SAMPLE_PLAN,
     _build_test_client,
@@ -102,6 +103,45 @@ async def test_non_xlsx_upload_returns_error(tmp_path: Path) -> None:
 
 
 @pytest.mark.anyio
+async def test_oversized_course_plan_upload_shows_hint_without_saving(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(course_plans_routes, "MAX_COURSE_PLAN_UPLOAD_BYTES", 8)
+    client, session_factory = _build_test_client(tmp_path)
+    course = _create_course(session_factory)
+    try:
+        response = await client.post(
+            f"/courses/{course.id}/course-plan/upload",
+            files={
+                "file": (
+                    "too-large.xlsx",
+                    b"012345678",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
+
+        assert response.status_code == 400
+        assert response.status_code != 500
+        assert "文件过大，请拆分资料后上传。" in response.text
+        assert "授课计划导入结果" not in response.text
+        assert "课次预览与选择" not in response.text
+        assert str(tmp_path) not in response.text
+        assert "Traceback" not in response.text
+        assert "traceback" not in response.text.lower()
+        with session_factory() as session:
+            assert session.scalars(select(CoursePlanUpload)).all() == []
+            assert session.scalars(select(PlannedLesson)).all() == []
+            assert session.scalars(select(Lesson)).all() == []
+        upload_dir = tmp_path / "course-plans"
+        assert not upload_dir.exists() or list(upload_dir.iterdir()) == []
+    finally:
+        await client.aclose()
+        main.app.dependency_overrides.clear()
+
+
+@pytest.mark.anyio
 async def test_upload_sample_xlsx_creates_upload_and_28_planned_lessons(tmp_path: Path) -> None:
     client, session_factory = _build_test_client(tmp_path)
     course = _create_course(session_factory)
@@ -164,6 +204,10 @@ async def test_preview_page_shows_import_result(tmp_path: Path) -> None:
         assert "备注" in preview_response.text
         assert "success" in preview_response.text
         assert "课次标题" in preview_response.text
+        assert "数据库应用与数据分析" in preview_response.text
+        assert "0102" in preview_response.text
+        assert "数据库的范式" in preview_response.text
+        assert "书面实验：设计商品销售系统数据库" in preview_response.text
     finally:
         await client.aclose()
         main.app.dependency_overrides.clear()
